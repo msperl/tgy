@@ -218,6 +218,7 @@
 
 ;.def	nfet_on		= r18
 ;.def	nfet_off	= r19
+.def	com_count	= r19		; commutations since last read
 .def	i_temp1		= r20		; interrupt temporary
 .def	i_temp2		= r21		; interrupt temporary
 .def	temp3		= r22		; main temporary (L)
@@ -2101,6 +2102,7 @@ wait_for_high:	sbr	flags1, (1<<ACO_EDGE_HIGH)
 ; us start from braking, RC timeout, or power-up without misaligning.
 ;
 wait_for_edge:
+		inc	com_count
 		lds	temp1, powerskip	; Are we trying to track a maybe running motor?
 		subi	temp1, 1
 		brcs	wait_pwm_enable
