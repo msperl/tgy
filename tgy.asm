@@ -782,6 +782,78 @@ rcpint_exit:	rcp_int_rising_edge i_temp1	; Set next int to rising edge
 		out	SREG, i_sreg
 		reti
 	.endif
+;-------------------------------------------------------------------------
+	.if USE_INT0S
+		in	i_sreg, SREG
+		cbi	PORTB, 3
+		cbi	DDRB, 3			; MOSI as input
+		ldi	i_temp1, 0
+
+		rcall	readabit
+		rcall	readabit
+		rcall	readabit
+		rcall	readabit
+		rcall	readabit
+		rcall	readabit
+		rcall	readabit
+		rcall	readabit
+		mov	rx_h, i_temp1
+		sbr	flags1, (1 << EVAL_RC) + (1 << UART_MODE)
+
+		mov	i_temp1, com_count
+		sbi	DDRB, 3			; MOSI as output
+		rcall	writeabit
+		rcall	writeabit
+		rcall	writeabit
+		rcall	writeabit
+		rcall	writeabit
+		rcall	writeabit
+		rcall	writeabit
+		rcall	writeabit
+		ldi	com_count, 0x05
+rcpint_exit:	ldi	i_temp1, 1 << INTF0
+		out	GICR, i_temp1
+		out	SREG, i_sreg
+		reti
+rcpint_exit2:	pop	i_temp1
+		pop	i_temp1
+		rjmp	rcpint_exit
+
+readabit:	ldi	i_temp2, 16		; Set a timeout
+stilllow0:	dec	i_temp2			; Wait for rcp_in high until TO
+		breq	rcpint_exit2
+		sbic	PIND, rcp_in
+		rjmp	stilllow0
+
+		lsl	i_temp1
+		sbic	PINB, 3			; Skip if MOSI low
+		ori	i_temp1, 1
+
+		ldi	i_temp2, 16
+stillhigh0:	sbic	PIND, rcp_in
+		ret
+		dec	i_temp2
+		brne	stillhigh0
+		rjmp	rcpint_exit2
+
+writeabit:	sbrc	i_temp1, 7
+		sbi	PORTB, 3		; Set MOSI
+		sbrs	i_temp1, 7
+		cbi	PORTB, 3		; Clear MOSI
+		lsl	i_temp1
+
+		ldi	i_temp2, 16		; Set a timeout
+stilllow1:	dec	i_temp2			; Wait for RCP_IN high until TO
+		breq	rcpint_exit2
+		sbic	PIND, rcp_in
+		rjmp	stilllow1
+		;; jump to stillhigh0?
+stillhigh1:	sbic	PIND, rcp_in		; Wait for RCP_IN low until TO
+		ret
+		dec	i_temp2
+		brne	stillhigh1
+		rjmp	rcpint_exit2
+	.endif
 ;-----bko-----------------------------------------------------------------
 i2c_int:
 	.if USE_I2C
@@ -1032,7 +1104,7 @@ mul_y_12x34:
 ; internal RC slows down when hot, making it impossible to reach full
 ; throttle.
 evaluate_rc_init:
-		.if USE_UART
+		.if USE_UART || USE_INT0S
 		sbrc	flags1, UART_MODE
 		rjmp	evaluate_rc_uart
 		.endif
@@ -1122,7 +1194,7 @@ rc_prog_done:	rcall	eeprom_write_block
 		.endif
 ;-----bko-----------------------------------------------------------------
 evaluate_rc:
-		.if USE_UART
+		.if USE_UART || USE_INT0S
 		sbrc	flags1, UART_MODE
 		rjmp	evaluate_rc_uart
 		.endif
@@ -1220,7 +1292,7 @@ evaluate_rc_i2c:
 		rjmp	rc_do_scale		; The rest of the code is common
 .endif
 ;-----bko-----------------------------------------------------------------
-.if USE_UART
+.if USE_UART || USE_INT0S
 evaluate_rc_uart:
 		mov	YH, rx_h		; Copy 8-bit input
 		cbr	flags1, (1<<EVAL_RC)+(1<<REVERSE)
@@ -1679,7 +1751,7 @@ control_start:
 		ldi	temp1, (1<<TWIE)+(1<<TWEN)+(1<<TWEA)+(1<<TWINT)
 		out	TWCR, temp1
 		.endif
-		.if USE_INT0 || USE_ICP
+		.if USE_INT0 || USE_ICP || USE_INT0S
 		rcp_int_rising_edge temp1
 		rcp_int_enable temp1
 		.endif
@@ -1715,7 +1787,7 @@ i_rc_puls_rx:	rcall	evaluate_rc_init
 		sbrs	flags1, UART_MODE
 		out	UCSRB, ZH		; Turn off UART and interrupt
 		.endif
-		.if USE_INT0 || USE_ICP
+		.if USE_INT0 || USE_ICP || USE_INT0S
 		mov	temp1, flags1
 		andi	temp1, (1<<I2C_MODE)+(1<<UART_MODE)
 		breq	i_rc_puls3
