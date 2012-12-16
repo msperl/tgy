@@ -783,76 +783,59 @@ rcpint_exit:	rcp_int_rising_edge i_temp1	; Set next int to rising edge
 		reti
 	.endif
 ;-------------------------------------------------------------------------
+; New bitbanging serial protocol that uses one interrupt per bit.  MOSI is
+; the bi-directional data line, RCP_IN is the (host-driven) clock line.
+; First byte received is the desired throttle level.  If the host continues
+; clocking then we return something.  Currently it's the commutations count.
+; Could also return the temperature and/or voltage later.  MSB-first.
+;
+; With a single interrupt to handle all the receiving and sending we were
+; blocking the main program for too long and glitches were seen.
+; rx_l is being abused as our state variable.
 	.if USE_INT0S
 		in	i_sreg, SREG
-		cbi	PORTB, 3
-		cbi	DDRB, 3			; MOSI as input
-		ldi	i_temp1, 0
 
-		rcall	readabit
-		rcall	readabit
-		rcall	readabit
-		rcall	readabit
-		rcall	readabit
-		rcall	readabit
-		rcall	readabit
-		rcall	readabit
-		mov	rx_h, i_temp1
-		sbr	flags1, (1 << EVAL_RC) + (1 << UART_MODE)
+		in	i_temp1, TIFR
+		sbrc	i_temp1, OCF1B		; Skip if no time out yet
+		rjmp	rcpint_first		; Timed out, re-start
 
-		mov	i_temp1, com_count
-		sbi	DDRB, 3			; MOSI as output
-		rcall	writeabit
-		rcall	writeabit
-		rcall	writeabit
-		rcall	writeabit
-		rcall	writeabit
-		rcall	writeabit
-		rcall	writeabit
-		rcall	writeabit
-		ldi	com_count, 0x05
-rcpint_exit:	ldi	i_temp1, 1 << INTF0
-		out	GICR, i_temp1
+		; Read one bit, this is one of bits 6-0
+		lsl	rx_h
+		sbic	PINB, 3			; Skip if MOSI low
+		inc	rx_h
+
+		dec	rx_l
+		breq	rcpint_last
+
 		out	SREG, i_sreg
 		reti
-rcpint_exit2:	pop	i_temp1
-		pop	i_temp1
-		rjmp	rcpint_exit
 
-readabit:	ldi	i_temp2, 16		; Set a timeout
-stilllow0:	dec	i_temp2			; Wait for rcp_in high until TO
-		breq	rcpint_exit2
-		sbic	PIND, rcp_in
-		rjmp	stilllow0
+rcpint_last:	sbr	flags1, (1 << EVAL_RC) + (1 << UART_MODE)
+		;; TODO: set OCF1B manually so that an additional interrupt
+		;; would reset EVAL_RC before mangling rx_h
+		out	SREG, i_sreg
+		reti
 
-		lsl	i_temp1
-		sbic	PINB, 3			; Skip if MOSI low
-		ori	i_temp1, 1
+rcpint_first:	cbi	PORTB, 3		; No pull-up on MOSI
+		cbi	DDRB, 3			; MOSI as input
+		clr	rx_h			; Nothing received so far
+		sbic	PINB, 3			; Receive the MSB
+		inc	rx_h
 
-		ldi	i_temp2, 16
-stillhigh0:	sbic	PIND, rcp_in
-		ret
-		dec	i_temp2
-		brne	stillhigh0
-		rjmp	rcpint_exit2
+		in	i_temp1, TCNT1L		; get timer1 values
+		in	i_temp2, TCNT1H
+		adiwx	i_temp1, i_temp2, 400	; Timeout in CPU cycles
+		out	OCR1BH, i_temp2
+		out	OCR1BL, i_temp1
+		ldi	i_temp1, (1 << OCF1B)	; Clear OCF1B flag
+		out	TIFR, i_temp1
 
-writeabit:	sbrc	i_temp1, 7
-		sbi	PORTB, 3		; Set MOSI
-		sbrs	i_temp1, 7
-		cbi	PORTB, 3		; Clear MOSI
-		lsl	i_temp1
+		ldi	i_temp1, 0x07		; Reset the bit counter
+		mov	rx_l, i_temp1
+		cbr	flags1, (1 << EVAL_RC) + (1 << UART_MODE)
 
-		ldi	i_temp2, 16		; Set a timeout
-stilllow1:	dec	i_temp2			; Wait for RCP_IN high until TO
-		breq	rcpint_exit2
-		sbic	PIND, rcp_in
-		rjmp	stilllow1
-		;; jump to stillhigh0?
-stillhigh1:	sbic	PIND, rcp_in		; Wait for RCP_IN low until TO
-		ret
-		dec	i_temp2
-		brne	stillhigh1
-		rjmp	rcpint_exit2
+		out	SREG, i_sreg
+		reti
 	.endif
 ;-----bko-----------------------------------------------------------------
 i2c_int:
