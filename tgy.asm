@@ -218,7 +218,7 @@
 
 ;.def	nfet_on		= r18
 ;.def	nfet_off	= r19
-.def	com_count	= r19		; commutations since last read
+.def	read_state	= r19		; int0s communication state
 .def	i_temp1		= r20		; interrupt temporary
 .def	i_temp2		= r21		; interrupt temporary
 .def	temp3		= r22		; main temporary (L)
@@ -230,7 +230,7 @@
 	.equ	OCT1_PENDING	= 0	; if set, output compare interrupt is pending
 	.equ	SET_DUTY	= 1	; if set when armed, set duty during evaluate_rc
 ;	.equ	I_pFET_HIGH	= 2	; set if over-current detect
-;	.equ	GET_STATE	= 3	; set if state is to be send
+	.equ	GET_STATE	= 3	; set if state is to be sent
 	.equ	I2C_FIRST	= 4	; if set, i2c will receive first byte next
 	.equ	I2C_SPACE_LEFT	= 5	; if set, i2c buffer has room
 	.equ	UART_SYNC	= 6	; if set, we are waiting for our serial throttle byte
@@ -307,6 +307,9 @@ neutral_l:	.byte	1	; Offset for neutral throttle (in CPU_MHZ)
 neutral_h:	.byte	1
 max_pwm:	.byte	1	; MaxPWM for MK (NOTE: 250 while stopped is magic and enables v2)
 motor_count:	.byte	1	; Motor number for serial control
+com_count_l:	.byte	1	; Commutations count since last serial read
+com_count_h:	.byte	1
+com_count_t:	.byte	1	; The place to hold com_count_h sync value
 ;**** **** **** **** ****
 ; The following entries are block-copied from/to EEPROM
 eeprom_sig_l:	.byte	1
@@ -799,39 +802,85 @@ rcpint_exit:	rcp_int_rising_edge i_temp1	; Set next int to rising edge
 		sbrc	i_temp1, OCF1B		; Skip if no time out yet
 		rjmp	rcpint_first		; Timed out, re-start
 
-		; Read one bit, this is one of bits 6-0
-		lsl	rx_h
-		sbic	PINB, 3			; Skip if MOSI low
-		inc	rx_h
+		inc	rx_l
+		brpl	rcpint_last
 
-		dec	rx_l
-		breq	rcpint_last
+		; Read one bit, this is one of bits 6-1
+		lsl	read_state
+		sbic	PINB, 3			; Skip if MOSI low
+		inc	read_state
 
 		out	SREG, i_sreg
 		reti
 
-rcpint_last:	sbr	flags1, (1 << EVAL_RC) + (1 << UART_MODE)
-		;; TODO: set OCF1B manually so that an additional interrupt
+rcpint_last:	brne	rcpint_send
+
+		; Read the last bit, bit 0
+		lsl	read_state
+		sbic	PINB, 3			; Skip if MOSI low
+		inc	read_state
+
+		mov	rx_h, read_state
+		sbr	flags1, (1 << EVAL_RC) + (1 << UART_MODE)
+		;; TODO: somehow force OCF1B so that an additional interrupt
 		;; would reset EVAL_RC before mangling rx_h
 		out	SREG, i_sreg
 		reti
 
+rcpint_send:	sbis	DDRB, 3			; Are we set up for sending?
+		rjmp	rcpint_read_first
+
+send_continue:	sbrc	read_state, 7
+		sbi	PORTB, 3		; Set MOSI
+		sbrs	read_state, 7
+		cbi	PORTB, 3		; Clear MOSI
+		lsl	read_state
+
+		out	SREG, i_sreg
+		reti
+
+rcpint_read_first:
+		; We're about to send bit 7, set everything up
+		sbic	PINB, 3			; Receive the "address" bit
+		rjmp	rcpint_read_high
+
+rcpint_read_low:
+		clr	i_temp1
+		lds	read_state, com_count_h
+		sts	com_count_h, i_temp1
+		sts	com_count_t, read_state
+		lds	read_state, com_count_l
+		sts	com_count_l, i_temp1
+		cbr	flags1, (1 << EVAL_RC) + (1 << UART_MODE)
+		sbi	DDRB, 3			; MOSI as OUTPUT
+		rjmp	send_continue
+
+rcpint_read_high:
+		lds	read_state, com_count_t
+		cbr	flags1, (1 << EVAL_RC) + (1 << UART_MODE)
+		sbi	DDRB, 3			; MOSI as OUTPUT
+		rjmp	send_continue
+
 rcpint_first:	cbi	PORTB, 3		; No pull-up on MOSI
 		cbi	DDRB, 3			; MOSI as input
-		clr	rx_h			; Nothing received so far
-		sbic	PINB, 3			; Receive the MSB
-		inc	rx_h
+
+		; Direction bit 0 indicates a read, 1 a write
+		; rx_l is increased for every bit, negative means we're
+		; receiveing a bit written by host, >= 0 means we're
+		; sending a bit
+		ldi	i_temp1, -0x08		; Reset the bit counter
+		sbis	PINB, 3			; Receive the direction bit
+		ldi	i_temp1, 0x00		; Reset the bit counter
+		mov	rx_l, i_temp1
 
 		in	i_temp1, TCNT1L		; get timer1 values
 		in	i_temp2, TCNT1H
-		adiwx	i_temp1, i_temp2, 400	; Timeout in CPU cycles
+		adiwx	i_temp1, i_temp2, 550	; Timeout in CPU cycles
 		out	OCR1BH, i_temp2
 		out	OCR1BL, i_temp1
 		ldi	i_temp1, (1 << OCF1B)	; Clear OCF1B flag
 		out	TIFR, i_temp1
 
-		ldi	i_temp1, 0x07		; Reset the bit counter
-		mov	rx_l, i_temp1
 		cbr	flags1, (1 << EVAL_RC) + (1 << UART_MODE)
 
 		out	SREG, i_sreg
@@ -2157,7 +2206,11 @@ wait_for_high:	sbr	flags1, (1<<ACO_EDGE_HIGH)
 ; us start from braking, RC timeout, or power-up without misaligning.
 ;
 wait_for_edge:
-		inc	com_count
+		lds	temp1, com_count_l
+		lds	temp2, com_count_h
+		adiw	temp1, 1
+		sts	com_count_l, temp1
+		sts	com_count_h, temp2
 		lds	temp1, powerskip	; Are we trying to track a maybe running motor?
 		subi	temp1, 1
 		brcs	wait_pwm_enable
