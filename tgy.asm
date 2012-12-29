@@ -875,7 +875,7 @@ rcpint_first:	cbi	PORTB, 3		; No pull-up on MOSI
 
 		in	i_temp1, TCNT1L		; get timer1 values
 		in	i_temp2, TCNT1H
-		adiwx	i_temp1, i_temp2, 550	; Timeout in CPU cycles
+		adiwx	i_temp1, i_temp2, 900	; Timeout in CPU cycles
 		out	OCR1BH, i_temp2
 		out	OCR1BL, i_temp1
 		ldi	i_temp1, (1 << OCF1B)	; Clear OCF1B flag
@@ -1291,7 +1291,11 @@ rc_not_full:	sts	rc_duty_l, YL
 		sts	rc_duty_h, YH
 		sbrs	flags0, SET_DUTY
 		rjmp	rc_no_set_duty
+		.if USE_INT0S
+		ldi	temp1, 64		; about 4s for serial
+		.else
 		ldi	temp1, 2
+		.endif
 		mov	rc_timeout, temp1	; Short rc_timeout when driving
 		rjmp	set_new_duty_l		; Skip reload into YL:YH
 rc_no_set_duty:	ldi	temp1, RCP_TOT
@@ -1787,6 +1791,13 @@ control_start:
 		rcp_int_rising_edge temp1
 		rcp_int_enable temp1
 		.endif
+		.if USE_INT0S
+		in	temp1, TCNT1L
+		in	temp2, TCNT1H
+		adiwx	temp1, temp2, 100	; Make sure OCF1B gets set
+		out	OCR1BH, i_temp2
+		out	OCR1BL, i_temp1
+		.endif
 
 		sei				; enable all interrupts
 
@@ -1808,9 +1819,13 @@ i_rc_puls_rx:	rcall	evaluate_rc_init
 		lds	YH, rc_duty_h
 		adiw	YL, 0			; Test for zero
 		brne	i_rc_puls1
+		.if USE_INT0S
+		; A single command is enough so as to allow slow rates
+		.else
 		ldi	temp1, 10		; wait for this count of receiving power off
 		cp	rc_timeout, temp1
 		brlo	i_rc_puls2
+		.endif
 		.if USE_I2C
 		sbrs	flags1, I2C_MODE
 		out	TWCR, ZH		; Turn off I2C and interrupt
@@ -1819,7 +1834,7 @@ i_rc_puls_rx:	rcall	evaluate_rc_init
 		sbrs	flags1, UART_MODE
 		out	UCSRB, ZH		; Turn off UART and interrupt
 		.endif
-		.if USE_INT0 || USE_ICP || USE_INT0S
+		.if USE_INT0 || USE_ICP
 		mov	temp1, flags1
 		andi	temp1, (1<<I2C_MODE)+(1<<UART_MODE)
 		breq	i_rc_puls3
@@ -1889,7 +1904,11 @@ start_from_running:
 		; last_tcnt1 and set the duty (limited by STARTUP) and
 		; clear POWER_OFF.
 		rcall	wait_timeout
+		.if USE_INT0S
+		ldi	temp1, 64
+		.else
 		ldi	temp1, 2		; Start with a short timeout to stop quickly
+		.endif
 		mov	rc_timeout, temp1	; if we see no further pulses after the first.
 		ldi	temp1, 6		; Do not enable FETs during first cycle to
 		sts	powerskip, temp1	; see if motor is running, and align to it.
