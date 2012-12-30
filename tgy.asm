@@ -788,9 +788,14 @@ rcpint_exit:	rcp_int_rising_edge i_temp1	; Set next int to rising edge
 ;-------------------------------------------------------------------------
 ; New bitbanging serial protocol that uses one interrupt per bit.  MOSI is
 ; the bi-directional data line, RCP_IN is the (host-driven) clock line.
-; First byte received is the desired throttle level.  If the host continues
-; clocking then we return something.  Currently it's the commutations count.
-; Could also return the temperature and/or voltage later.  MSB-first.
+; The first bit (direction bit) is always host to ESC.  A write operation
+; starts with the first bit set and the data bits following.  First and only
+; byte received is the desired throttle level.  A read operation starts with
+; the direction bit clear followed by the address bit.  Currently the
+; 16-bit commutations counter can be read.  The low byte has address 0 and
+; the high byte 1.  Low byte should be requested first.  We could also return
+; the temperature and/or voltage later.  All bytes are xmitted MSB-first and
+; the values read are offset by 0x0505 so that a host can test the connection.
 ;
 ; With a single interrupt to handle all the receiving and sending we were
 ; blocking the main program for too long and glitches were seen.
@@ -845,7 +850,7 @@ rcpint_read_first:
 		rjmp	rcpint_read_high
 
 rcpint_read_low:
-		clr	i_temp1
+		ldi	i_temp1, 0x05
 		lds	read_state, com_count_h
 		sts	com_count_h, i_temp1
 		sts	com_count_t, read_state
