@@ -309,7 +309,6 @@ max_pwm:	.byte	1	; MaxPWM for MK (NOTE: 250 while stopped is magic and enables v
 motor_count:	.byte	1	; Motor number for serial control
 com_count_l:	.byte	1	; Commutations count since last serial read
 com_count_h:	.byte	1
-com_count_t:	.byte	1	; The place to hold com_count_h sync value
 ;**** **** **** **** ****
 ; The following entries are block-copied from/to EEPROM
 eeprom_sig_l:	.byte	1
@@ -789,17 +788,17 @@ rcpint_exit:	rcp_int_rising_edge i_temp1	; Set next int to rising edge
 ; New bitbanging serial protocol that uses one interrupt per bit.  MOSI is
 ; the bi-directional data line, RCP_IN is the (host-driven) clock line.
 ; The first bit (direction bit) is always host to ESC.  A write operation
-; starts with the first bit set and the data bits following.  First and only
-; byte received is the desired throttle level.  A read operation starts with
+; starts with the first bit set and the data bits following.  14 bits
+; received are the desired throttle level.  A read operation starts with
 ; the direction bit clear followed by the address bit.  Currently the
-; 16-bit commutations counter can be read.  The low byte has address 0 and
-; the high byte 1.  Low byte should be requested first.  We could also return
+; 16-bit commutations counter can be read at address 0.  We could also return
 ; the temperature and/or voltage later.  All bytes are xmitted MSB-first and
-; the values read are offset by 0x0505 so that a host can test the connection.
+; the address 1 reads return the constant 0x1234 so that host can test the
+; connection.
 ;
 ; With a single interrupt to handle all the receiving and sending we were
 ; blocking the main program for too long and glitches were seen.
-; rx_l is being abused as our state variable.
+; rx_l and rx_h are being abused as our state variable (read/write buffer).
 	.if USE_INT0S
 		in	i_sreg, SREG
 
@@ -807,13 +806,14 @@ rcpint_exit:	rcp_int_rising_edge i_temp1	; Set next int to rising edge
 		sbrc	i_temp1, OCF1B		; Skip if no time out yet
 		rjmp	rcpint_first		; Timed out, re-start
 
-		inc	rx_l
+		inc	read_state
 		brpl	rcpint_last
 
-		; Read one bit, this is one of bits 6-1
-		lsl	read_state
+		; Read one bit, this is one of bits 13-1
+		lsl	rx_l
+		rol	rx_h
 		sbic	PINB, 3			; Skip if MOSI low
-		inc	read_state
+		inc	rx_l
 
 		out	SREG, i_sreg
 		reti
@@ -821,48 +821,49 @@ rcpint_exit:	rcp_int_rising_edge i_temp1	; Set next int to rising edge
 rcpint_last:	brne	rcpint_send
 
 		; Read the last bit, bit 0
-		lsl	read_state
+		lsl	rx_l
+		rol	rx_h
 		sbic	PINB, 3			; Skip if MOSI low
-		inc	read_state
+		inc	rx_l
 
-		mov	rx_h, read_state
 		sbr	flags1, (1 << EVAL_RC) + (1 << UART_MODE)
-		;; TODO: somehow force OCF1B so that an additional interrupt
-		;; would reset EVAL_RC before mangling rx_h
 		out	SREG, i_sreg
 		reti
 
 rcpint_send:	sbis	DDRB, 3			; Are we set up for sending?
 		rjmp	rcpint_read_first
 
-send_continue:	sbrc	read_state, 7
+send_continue:	sbrc	rx_h, 7
 		sbi	PORTB, 3		; Set MOSI
-		sbrs	read_state, 7
+		sbrs	rx_h, 7
 		cbi	PORTB, 3		; Clear MOSI
-		lsl	read_state
+		lsl	rx_l
+		rol	rx_h
 
 		out	SREG, i_sreg
 		reti
 
 rcpint_read_first:
-		; We're about to send bit 7, set everything up
+		; We're about to send the MSB, set everything up
 		sbic	PINB, 3			; Receive the "address" bit
 		rjmp	rcpint_read_high
 
 rcpint_read_low:
-		ldi	i_temp1, 0x05
-		lds	read_state, com_count_h
+		ldi	i_temp1, 0x00
+		lds	rx_h, com_count_h
+		lds	rx_l, com_count_l
 		sts	com_count_h, i_temp1
-		sts	com_count_t, read_state
-		lds	read_state, com_count_l
 		sts	com_count_l, i_temp1
-		cbr	flags1, (1 << EVAL_RC) + (1 << UART_MODE)
 		sbi	DDRB, 3			; MOSI as OUTPUT
 		rjmp	send_continue
 
 rcpint_read_high:
-		lds	read_state, com_count_t
-		cbr	flags1, (1 << EVAL_RC) + (1 << UART_MODE)
+		; For now we have nothing interesting to send other than
+		; the commutation counter, so send some identification value
+		; that the Host can test for to check connection
+		ldi	i_temp2, high(0x1234)
+		ldi	i_temp1, low(0x1234)
+		movw	rx_l, i_temp1
 		sbi	DDRB, 3			; MOSI as OUTPUT
 		rjmp	send_continue
 
@@ -870,17 +871,18 @@ rcpint_first:	cbi	PORTB, 3		; No pull-up on MOSI
 		cbi	DDRB, 3			; MOSI as input
 
 		; Direction bit 0 indicates a read, 1 a write
-		; rx_l is increased for every bit, negative means we're
+		; read_state is increased for every bit, negative means we're
 		; receiveing a bit written by host, >= 0 means we're
 		; sending a bit
-		ldi	i_temp1, -0x08		; Reset the bit counter
+		ldi	i_temp1, -14		; Reset the bit counter
 		sbis	PINB, 3			; Receive the direction bit
-		ldi	i_temp1, 0x00		; Reset the bit counter
-		mov	rx_l, i_temp1
+		ldi	i_temp1, 0		; Reset the bit counter
+		mov	read_state, i_temp1
+		clr	rx_l
 
 		in	i_temp1, TCNT1L		; get timer1 values
 		in	i_temp2, TCNT1H
-		adiwx	i_temp1, i_temp2, 900	; Timeout in CPU cycles
+		adiwx	i_temp1, i_temp2, 1600	; Timeout in CPU cycles
 		out	OCR1BH, i_temp2
 		out	OCR1BL, i_temp1
 		ldi	i_temp1, (1 << OCF1B)	; Clear OCF1B flag
@@ -1333,7 +1335,7 @@ evaluate_rc_i2c:
 		rjmp	rc_do_scale		; The rest of the code is common
 .endif
 ;-----bko-----------------------------------------------------------------
-.if USE_UART || USE_INT0S
+.if USE_UART
 evaluate_rc_uart:
 		mov	YH, rx_h		; Copy 8-bit input
 		cbr	flags1, (1<<EVAL_RC)+(1<<REVERSE)
@@ -1347,6 +1349,27 @@ evaluate_rc_uart:
 		movw	temp1, YL
 		ldi	temp3, low(0x100 * (POWER_RANGE - MIN_DUTY) / 200)
 		ldi	temp4, high(0x100 * (POWER_RANGE - MIN_DUTY) / 200)
+		rjmp	rc_do_scale		; The rest of the code is common
+.endif
+;-------------------------------------------------------------------------
+.if USE_INT0S
+evaluate_rc_uart:
+		movw	YL, rx_l		; Copy 16-bit input
+		cbr	flags1, (1<<EVAL_RC)+(1<<REVERSE)
+		; This probably can be done slightly more efficiently
+		.if MOTOR_REVERSE
+		sbrc	YH, 5
+		.else
+		sbrs	YH, 5
+		.endif
+		sbr	flags1, (1<<REVERSE)
+		cbr	YH, (1<<5)
+		adiw	YL, 0			; 16-bit zero-test
+		breq	rc_not_full
+	; Scale so that YH == 32 is MAX_POWER.
+		movw	temp1, YL
+		ldi	temp3, low(0x100 * (POWER_RANGE - MIN_DUTY) / 32)
+		ldi	temp4, high(0x100 * (POWER_RANGE - MIN_DUTY) / 32)
 		rjmp	rc_do_scale		; The rest of the code is common
 .endif
 ;-----bko-----------------------------------------------------------------
@@ -1575,7 +1598,7 @@ set_new_duty11:
 		cp	YL, temp1
 		cpc	YH, temp2
 		brcs	set_new_duty12
-		movw	temp1, YL		; temp1:temp2 >= PWR_MIN_START
+		movw	temp1, YL		; temp2:temp1 >= PWR_MIN_START
 set_new_duty12:	lsl	temp1
 		rol	temp2
 		cp	sys_control_l, temp1
