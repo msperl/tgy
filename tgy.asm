@@ -2153,6 +2153,14 @@ run6:
 		sbrc	flags1, POWER_OFF
 		breq	run_to_brake
 		.endif
+		; Increment the revolution counter atomically
+		cli
+		lds	temp1, com_count_l
+		lds	temp2, com_count_h
+		adiw	temp1, 1
+		sts	com_count_l, temp1
+		sts	com_count_h, temp2
+		sei
 		movw	YL, sys_control_l
 		adiw	YL, 0			; Test for zero
 		breq	restart_run
@@ -2253,11 +2261,6 @@ wait_for_high:	sbr	flags1, (1<<ACO_EDGE_HIGH)
 ; us start from braking, RC timeout, or power-up without misaligning.
 ;
 wait_for_edge:
-		lds	temp1, com_count_l
-		lds	temp2, com_count_h
-		adiw	temp1, 1
-		sts	com_count_l, temp1
-		sts	com_count_h, temp2
 		lds	temp1, powerskip	; Are we trying to track a maybe running motor?
 		subi	temp1, 1
 		brcs	wait_pwm_enable
