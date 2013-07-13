@@ -2420,6 +2420,7 @@ wait_blindly:
 		rjmp	wait_commutation
 
 start_adc_read:
+		cbr	flags2, (1 << READ_ADC)
 		sbr	flags2, (1 << BLIND_WAIT)
 		; Note we can set the mux and start the ADC conversion and
 		; let the main loop call set_comp_phase* because ADMUX is
