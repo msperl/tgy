@@ -1934,8 +1934,8 @@ wait_for_power_on:
 		ldi	temp1, 60
 		sts	rct_beacon, temp1	; Double rate after the first beep
 		rcall	beep_f3
-		rjmp	wait_for_power_on
 		.endif
+		rjmp	wait_for_power_on
 wait_for_power_rx:
 		rcall	evaluate_rc		; Only get rc_duty, don't set duty
 		adiw	YL, 0			; Test for zero
