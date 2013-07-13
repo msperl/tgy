@@ -10,6 +10,7 @@
 .equ	USE_I2C		= 0
 .equ	USE_UART	= 0
 .equ	USE_ICP		= 0
+.equ	HAS_TEMPERATURE	= 0
 
 ;*********************
 ; PORT D definitions *
@@ -144,7 +145,7 @@
 ;*********************
 ; PORT C definitions *
 ;*********************
-;.equ	mux_vbat	= 7	; ADC7 voltage input (47k from Vbat, 2.0k to gnd, 10.10V in -> .406V at ADC7)
+.equ	mux_vbat	= 7	; ADC7 voltage input (47k from Vbat, 2.0k to gnd, 10.10V in -> .406V at ADC7)
 ;.equ			= 6	; ADC6
 ;.equ			= 5	; ADC5
 .equ	mux_c		= 4	; ADC4 phase input

@@ -7,10 +7,12 @@
 ;***************************************************************
 
 .equ	F_CPU		= 16000000
-.equ	USE_INT0	= 1
+.equ	USE_INT0	= 0
+.equ	USE_INT0S	= 1
 .equ	USE_I2C		= 0	; We could, but FETs are on the I2C ports
 .equ	USE_UART	= 0
 .equ	USE_ICP		= 0
+.equ	HAS_TEMPERATURE	= 0
 
 ;*********************
 ; PORT D definitions *
@@ -79,7 +81,7 @@
 .equ	BpFET		= 5
 .equ	BnFET		= 4
 .equ	CpFET		= 3
-;.equ	accu_adc	= 2	; ADC2 -> not used
+.equ	mux_vbat	= 2	; ADC2 -> not used
 ;.equ	AnREF		= 1	; ADC1 -> not used
 .equ	mux_c		= 0	; ADC0
 
