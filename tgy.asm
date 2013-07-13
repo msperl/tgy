@@ -820,10 +820,6 @@ rcpint_exit:	rcp_int_rising_edge i_temp1	; Set next int to rising edge
 	.if USE_INT0S
 		in	i_sreg, SREG
 
-		in	i_temp1, TIFR
-		sbrc	i_temp1, OCF1B		; Skip if no time out yet
-		rjmp	rcpint_first		; Timed out, re-start
-
 		inc	read_state
 		brpl	rcpint_last
 
@@ -836,7 +832,7 @@ rcpint_exit:	rcp_int_rising_edge i_temp1	; Set next int to rising edge
 		out	SREG, i_sreg
 		reti
 
-rcpint_last:	brne	rcpint_send
+rcpint_last:	brne	rcpint_first		; Timed out, re-start
 
 		; Read the last bit, bit 0
 		lsl	rx_l
@@ -845,11 +841,10 @@ rcpint_last:	brne	rcpint_send
 		inc	rx_l
 
 		sbr	flags1, (1 << EVAL_RC) + (1 << UART_MODE)
+		ldi	i_temp1, 99
+		mov	read_state, i_temp1
 		out	SREG, i_sreg
 		reti
-
-rcpint_send:	sbis	DDRB, 3			; Are we set up for sending?
-		rjmp	rcpint_read_first
 
 send_continue:	sbrc	rx_h, 7
 		sbi	PORTB, 3		; Set MOSI
@@ -860,6 +855,9 @@ send_continue:	sbrc	rx_h, 7
 
 		out	SREG, i_sreg
 		reti
+
+rcpint_send:	cpi	read_state, 1
+		brne	send_continue
 
 rcpint_read_first:
 		; We're about to send the MSB, set everything up
@@ -885,8 +883,9 @@ rcpint_read_high:
 		sbi	DDRB, 3			; MOSI as OUTPUT
 		rjmp	send_continue
 
-rcpint_first:	cbi	PORTB, 3		; No pull-up on MOSI
-		cbi	DDRB, 3			; MOSI as input
+rcpint_first:	cpi	read_state, 100
+		brlt	rcpint_send
+		breq	rcpint_nop
 
 		; Direction bit 0 indicates a read, 1 a write
 		; read_state is increased for every bit, negative means we're
@@ -908,6 +907,10 @@ rcpint_first:	cbi	PORTB, 3		; No pull-up on MOSI
 
 		cbr	flags1, (1 << EVAL_RC) + (1 << UART_MODE)
 
+		out	SREG, i_sreg
+		reti
+rcpint_nop:
+		dec	read_state
 		out	SREG, i_sreg
 		reti
 	.endif
@@ -1792,7 +1795,10 @@ control_start:
 		rcall	puls_scale
 
 	; init registers and interrupts
-		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
+		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<OCIE1B)
+		.if USE_INT0S
+		sbr	temp1, (1<<TOIE2)
+		.endif
 		out	TIFR, temp1		; clear TOIE1, OCIE1A, and TOIE2
 		out	TIMSK, temp1		; enable TOIE1, OCIE1A, and TOIE2 interrupts
 
