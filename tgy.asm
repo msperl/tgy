@@ -867,21 +867,21 @@ rcpint_read_first:
 		rjmp	rcpint_read_high
 
 rcpint_read_low:
-		ldi	i_temp1, 0x00
+		; Add an identification value 0x1234 to the commutation
+		; counter so that the host can use it at any time the motor
+		; is stopped to check if the ESC is alive and connected.
 		lds	rx_h, com_count_h
 		lds	rx_l, com_count_l
-		sts	com_count_h, i_temp1
+		ldi	i_temp2, high(0x1234)
+		ldi	i_temp1, low(0x1234)
+		sts	com_count_h, i_temp2
 		sts	com_count_l, i_temp1
 		sbi	DDRB, 3			; MOSI as OUTPUT
 		rjmp	send_continue
 
 rcpint_read_high:
-		; For now we have nothing interesting to send other than
-		; the commutation counter, so send some identification value
-		; that the Host can test for to check connection
-		ldi	i_temp2, high(0x1234)
-		ldi	i_temp1, low(0x1234)
-		movw	rx_l, i_temp1
+		lds	rx_h, vbat_h
+		lds	rx_l, vbat_l
 		sbi	DDRB, 3			; MOSI as OUTPUT
 		rjmp	send_continue
 
@@ -1846,8 +1846,12 @@ control_start:
 		in	temp1, TCNT1L
 		in	temp2, TCNT1H
 		adiwx	temp1, temp2, 100	; Make sure OCF1B gets set
-		out	OCR1BH, i_temp2
-		out	OCR1BL, i_temp1
+		out	OCR1BH, temp2
+		out	OCR1BL, temp1
+		ldi	temp2, high(0x1234)
+		ldi	temp1, low(0x1234)
+		sts	com_count_h, temp2
+		sts	com_count_l, temp1
 		.endif
 
 		sei				; enable all interrupts
