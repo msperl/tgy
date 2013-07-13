@@ -146,6 +146,7 @@
 ; PORT C definitions *
 ;*********************
 .equ	mux_vbat	= 7	; ADC7 voltage input (47k from Vbat, 2.0k to gnd, 10.10V in -> .406V at ADC7)
+				; 47k from Vbat, 4.7k to gnd on the MultiStar
 ;.equ			= 6	; ADC6
 ;.equ			= 5	; ADC5
 .equ	mux_c		= 4	; ADC4 phase input
