@@ -251,6 +251,7 @@
 	.equ	B_FET		= 1	; if set, B FET is being PWMed
 	.equ	C_FET		= 2	; if set, C FET is being PWMed
 	.equ	ALL_FETS	= (1<<A_FET)+(1<<B_FET)+(1<<C_FET)
+	.equ	BLIND_WAIT	= 3	; ADC is busy so wait for ZC blindly
 ;.def	flags2	= r25
 ;	.equ	RPM_RANGE1	= 0	; if set RPM is lower than 1831 RPM
 ;	.equ	RPM_RANGE2	= 1	; if set RPM is lower than 3662 RPM
@@ -1925,6 +1926,8 @@ wait_for_power_rx:
 
 start_from_running:
 		rcall	switch_power_off
+		sbrc	flags2, BLIND_WAIT
+		rjmp	start_from_running
 		comp_init temp1			; init comparator
 		RED_off
 
@@ -2317,6 +2320,8 @@ wait_for_blank:
 		ldi	temp4, 13 * 256 / 120
 		rcall	set_timing_degrees
 		rcall	wait_OCT1_tot		; Wait for the minimum blanking period
+		sbrc	flags2, BLIND_WAIT
+		rjmp	wait_blindly
 
 		ldi	temp4, (13+29) * 256 / 120
 		rcall	set_timing_degrees	; Set timeout for maximum blanking period
@@ -2374,6 +2379,20 @@ wait_commutation:
 		pop	temp1			; Throw away return address
 		pop	temp1
 		rjmp	restart_control		; Restart control immediately on RC timeout
+
+wait_blindly:
+		; Spin for the period measured in previous commutation instead
+		; of using the Analog Comparator because the mux is in use by
+		; the ADC and can't be used for demag or zero-crossing
+		; detection.  Don't call evaluate_rc until we can detect
+		; actual periods in the next cycle.
+		; Note: if this lasts for a few commutations the period will
+		; keep growing a bit each time, we hope it lasts at most one
+		; commutation period.
+		ldi	temp4, 60 * 256 / 120
+		rcall	set_timing_degrees
+		rcall	wait_OCT1_tot
+		rjmp	wait_commutation
 
 .if BOOT_LOADER
 .include "boot.inc"
