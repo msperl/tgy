@@ -358,7 +358,7 @@ eeprom_end:	.byte	1
 		ijmp		; t2ovfl_int
 		rjmp rcp_int	; icp1_int
 		rjmp t1oca_int	; t1oca_int
-		reti		; t1ocb_int
+		rjmp t1ocb_int	; t1ocb_int
 		rjmp t1ovfl_int	; t1ovfl_int
 		reti		; t0ovfl_int
 		reti		; spi_int
@@ -1354,7 +1354,12 @@ evaluate_rc_uart:
 ;-------------------------------------------------------------------------
 .if USE_INT0S
 evaluate_rc_uart:
+		cli
 		movw	YL, rx_l		; Copy 16-bit input
+		mov	temp1, flags1
+		sei
+		sbrs	temp1, EVAL_RC
+		ret
 		cbr	flags1, (1<<EVAL_RC)+(1<<REVERSE)
 		; This probably can be done slightly more efficiently
 		.if MOTOR_REVERSE
@@ -2239,7 +2244,7 @@ wait_for_high:	sbr	flags1, (1<<ACO_EDGE_HIGH)
 ; synchronization, we check that demagnetization has finished after the
 ; minimum blanking period. If we do not see it by the maximum blanking
 ; period (about 30 degrees since we commutated last), we turn off power
-; and ontinue as if the ZC had occurred. PWM is enabled again after the
+; and continue as if the ZC had occurred. PWM is enabled again after the
 ; next commutation step.
 ;
 ; Normally, we wait for the blanking window to pass, look for the
