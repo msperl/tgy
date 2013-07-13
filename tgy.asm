@@ -710,13 +710,24 @@ t1oca_int:	in	i_sreg, SREG
 t1oca_int1:	sts	ocr1ax, i_temp1
 		out	SREG, i_sreg
 		reti
+
+t1ocb_int:
+	.if USE_INT0S
+		cbi	DDRB, 3				; MOSI as input
+		cbi	PORTB, 3			; No pull-up on MOSI
+		ldi	i_temp1, 100
+		mov	read_state, i_temp1
+	.endif
+		reti
 ;-----bko-----------------------------------------------------------------
 ; timer1 overflow interrupt (happens every 4096µs)
 t1ovfl_int:	in	i_sreg, SREG
 		lds	i_temp1, tcnt1x
 		inc	i_temp1
 		sts	tcnt1x, i_temp1
-		andi	i_temp1, 15			; Every 16 overflows
+		brne	timeout_check
+		sbr	flags2, (1 << READ_ADC)		; Every 256 overflows
+timeout_check:	andi	i_temp1, 15			; Every 16 overflows
 		brne	t1ovfl_int1
 		tst	rc_timeout
 		breq	t1ovfl_int2
