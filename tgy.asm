@@ -252,6 +252,8 @@
 	.equ	C_FET		= 2	; if set, C FET is being PWMed
 	.equ	ALL_FETS	= (1<<A_FET)+(1<<B_FET)+(1<<C_FET)
 	.equ	BLIND_WAIT	= 3	; ADC is busy so wait for ZC blindly
+	.equ	READ_ADC	= 4	; it's time to read temp. or voltage
+	.equ	ADC_VOLTAGE	= 5	; whether voltage or temp. is read next
 ;.def	flags2	= r25
 ;	.equ	RPM_RANGE1	= 0	; if set RPM is lower than 1831 RPM
 ;	.equ	RPM_RANGE2	= 1	; if set RPM is lower than 3662 RPM
@@ -310,6 +312,10 @@ max_pwm:	.byte	1	; MaxPWM for MK (NOTE: 250 while stopped is magic and enables v
 motor_count:	.byte	1	; Motor number for serial control
 com_count_l:	.byte	1	; Commutations count since last serial read
 com_count_h:	.byte	1
+adctemp_l:	.byte	1	; Temperature
+adctemp_h:	.byte	1
+vbat_l:		.byte	1	; Voltage
+vbat_h:		.byte	1
 ;**** **** **** **** ****
 ; The following entries are block-copied from/to EEPROM
 eeprom_sig_l:	.byte	1
@@ -366,7 +372,7 @@ eeprom_end:	.byte	1
 		rjmp urxc_int	; urxc
 		reti		; udre
 		reti		; utxc
-		reti		; adc_int
+		rjmp adc_int	; adc_int
 		reti		; eep_int
 		reti		; aci_int
 		rjmp i2c_int	; twi_int
@@ -1908,6 +1914,8 @@ wait_for_power_on:
 		.if BOOT_LOADER
 		rcall	boot_loader_test
 		.endif
+		sbrc	flags2, READ_ADC
+		rcall	start_adc_read
 		.if BEACON
 		lds	temp1, rct_beacon
 		cpi	temp1, 120		; Beep every 120 * 16 * 65536us (~8s)
@@ -2371,6 +2379,8 @@ wait_commutation:
 		sbrs	flags1, STARTUP
 		rcall	wait_OCT1_tot
 		flag_off
+		sbrc	flags2, READ_ADC
+		rcall	start_adc_read
 		lds	temp1, powerskip
 		cpse	temp1, ZH
 		sbr	flags1, (1<<POWER_OFF)	; Disable power when powerskipping
@@ -2393,6 +2403,42 @@ wait_blindly:
 		rcall	set_timing_degrees
 		rcall	wait_OCT1_tot
 		rjmp	wait_commutation
+
+start_adc_read:
+		sbr	flags2, (1 << BLIND_WAIT)
+		; Note we can set the mux and start the ADC conversion and
+		; let the main loop call set_comp_phase* because ADMUX is
+		; cached at the start of the conversion
+		ldi	temp1, 0xc0 + mux_vbat
+.if HAS_TEMPERATURE
+		sbrs	flags2, ADC_VOLTAGE
+		ldi	temp1, 0xc0 + mux_temp
+.endif
+		out	ADMUX, temp1
+		ldi	temp1, (1 << ADEN) + (1 << ADSC) + (1 << ADIE) + 4
+		out	ADCSRA, temp1
+		ret
+
+adc_int:
+		cbr	flags2, (1 << BLIND_WAIT)
+		comp_init i_temp1
+		sbi	ADMUX, ADLAR
+		in	i_temp1, ADCL
+		in	i_temp2, ADCH
+.if HAS_TEMPERATURE
+		sbrs	flags2, ADC_VOLTAGE
+		rjmp	save_temp
+.endif
+		sts	vbat_l, i_temp1
+		sts	vbat_h, i_temp2
+		cbr	flags2, (1 << ADC_VOLTAGE)
+		reti
+.if HAS_TEMPERATURE
+save_temp:	sts	adctemp_l, i_temp1
+		sts	adctemp_h, i_temp2
+		sbr	flags2, (1 << ADC_VOLTAGE)
+		reti
+.endif
 
 .if BOOT_LOADER
 .include "boot.inc"
