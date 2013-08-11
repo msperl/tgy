@@ -1,19 +1,23 @@
 # This Makefile is compatible with both BSD and GNU make
 
 ASM?= avra
+SHELL = /bin/bash
 
 .SUFFIXES: .inc .hex
 
-ALL_TARGETS = afro.hex afro2.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex dlux.hex hk200a.hex kda.hex rb50a.hex rb70a.hex rct50a.hex tp.hex tp_8khz.hex tp_i2c.hex tp_nfet.hex tp70a.hex tgy6a.hex tgy.hex
+ALL_TARGETS = afro.hex afro2.hex afro_hv.hex afro_nfet.hex arctictiger.hex birdie70a.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex dlux.hex hk200a.hex hm135a.hex kda.hex mkblctrl1.hex rb50a.hex rb70a.hex rct50a.hex tbs.hex tp.hex tp_8khz.hex tp_i2c.hex tp_nfet.hex tp70a.hex tgy6a.hex tgy.hex
+AUX_TARGETS = diy0.hex
 
 all: $(ALL_TARGETS)
 
 $(ALL_TARGETS): tgy.asm boot.inc
+$(AUX_TARGETS): tgy.asm boot.inc
 
 .inc.hex:
-	test -e $*.asm || ln -s tgy.asm $*.asm
-	$(ASM) -fI -o $@ -D $*_esc -e $*.eeprom -d $*.obj $*.asm
-	test -L $*.asm && rm -f $*.asm || true
+	@test -e $*.asm || ln -s tgy.asm $*.asm
+	@echo "$(ASM) -fI -o $@ -D $*_esc -e $*.eeprom -d $*.obj $*.asm"
+	@set -o pipefail; $(ASM) -fI -o $@ -D $*_esc -e $*.eeprom -d $*.obj $*.asm 2>&1 | grep -v 'PRAGMA directives currently ignored'
+	@test -L $*.asm && rm -f $*.asm || true
 
 test: all
 
@@ -26,19 +30,19 @@ binary_zip: $(ALL_TARGETS)
 	zip -9 "$$TARGET" $(ALL_TARGETS) && ls -l "$$TARGET"
 
 program_tgy_%: %.hex
-	avrdude -c stk500v2 -b 9600 -P /dev/ttyUSB0 -u -p m8 -D -U flash:w:$<:i
+	avrdude -c stk500v2 -b 9600 -P /dev/ttyUSB0 -u -p m8 -U flash:w:$<:i
 
 program_usbasp_%: %.hex
-	avrdude -c usbasp -u -p m8 -U flash:w:$<:i
+	avrdude -c usbasp -B.5 -p m8 -U flash:w:$<:i
 
 program_avrisp2_%: %.hex
-	avrdude -c avrisp2 -u -p m8 -U flash:w:$<:i
+	avrdude -c avrisp2 -p m8 -U flash:w:$<:i
 
 program_dragon_%: %.hex
 	avrdude -c dragon_isp -p m8 -P usb -U flash:w:$<:i
 
 program_dapa_%: %.hex
-	avrdude -c dapa -u -p m8 -U flash:w:$<:i
+	avrdude -c dapa -p m8 -U flash:w:$<:i
 
 program_uisp_%: %.hex
 	uisp -dprog=dapa --erase --upload --verify -v if=$<

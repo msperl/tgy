@@ -147,9 +147,11 @@
 ; Support listening on ICP pin (on AfroESCs)
 .if defined(USE_ICP) && USE_ICP
 .equ	RCP_PORT = PORTB
+.equ	RCP_PIN = PINB
 .equ	RCP_DDR = DDRB
 .else
 .equ	RCP_PORT = PORTD
+.equ	RCP_PIN = PIND
 .equ	RCP_DDR = DDRD
 .endif
 
@@ -157,7 +159,9 @@
 ; Fuses should have BOOTSZ1 set, BOOTSZ0 unset, BOOTRST set.
 ; Last nibble of hfuse should be A or 2 to save EEPROM on chip erase.
 ; Do not set WTDON. Implementing support for it here is big/difficult.
+.if !defined(BOOT_START)
 .equ BOOT_START = THIRDBOOTSTART
+.endif
 .org BOOT_START
 boot_reset:	ldi	ZL, high(RAMEND)	; Set up stack
 		ldi	ZH, low(RAMEND)
@@ -183,21 +187,21 @@ boot_rx_time1:	cpi	XL, low(TX_BUFFER)
 		in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	boot_tx_bytes
-boot_rx_no_tx:	sbic	PIND, rcp_in
+boot_rx_no_tx:	sbic	RCP_PIN, rcp_in
 		rjmp	boot_rx_time1		; Loop while high, waiting for low edge
 		out	TCNT2, r16
 		out	TIFR, r20
 boot_rx_time2:	in	r14, TIFR
 		sbrc	r14, TOV2
 boot_exit:	rjmp	FLASHEND + 1		; Low too long -- exit boot loader
-		sbis	PIND, rcp_in		; Loop while low
+		sbis	RCP_PIN, rcp_in		; Loop while low
 		rjmp	boot_rx_time2
 		out	TCNT2, r16
 		out	TIFR, r20		; Start measuring high time
 boot_rx_time3:	in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	boot_rx_time		; High too long, start over
-		sbic	PIND, rcp_in		; Loop while high, waiting for low edge
+		sbic	RCP_PIN, rcp_in		; Loop while high, waiting for low edge
 		rjmp	boot_rx_time3
 		in	r3, TCNT2		; Save learned high time
 		out	TCNT2, r16
@@ -205,7 +209,7 @@ boot_rx_time3:	in	r14, TIFR
 boot_rx_time4:	in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	FLASHEND + 1		; Low too long, exit boot loader
-		sbis	PIND, rcp_in		; Loop while low, waiting for high edge
+		sbis	RCP_PIN, rcp_in		; Loop while low, waiting for high edge
 		rjmp	boot_rx_time4
 		in	r2, TCNT2		; Save learned low time
 		mov	r0, r2
@@ -234,31 +238,31 @@ boot_rx:	out	TCNT2, r8
 boot_rx0:	in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	FLASHEND + 1		; Low too long, exit boot loader
-		sbis	PIND, rcp_in
+		sbis	RCP_PIN, rcp_in
 		rjmp	boot_rx0
 		out	TCNT2, r8		; Count falling edges for 7/8th of one bit time
 		out	TIFR, r20
 boot_rx1:	in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	boot_rx_time		; High too long (or EOT), start over
-		sbic	PIND, rcp_in
+		sbic	RCP_PIN, rcp_in
 		rjmp	boot_rx1
 		sec				; Receiving 1-bit
 boot_rx2:	in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	boot_rx_bit		; Timeout, must be 1-bit
-		sbis	PIND, rcp_in
+		sbis	RCP_PIN, rcp_in
 		rjmp	boot_rx2
 boot_rx3:	in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	boot_rx_time		; Hmm, timed out during second high
-		sbic	PIND, rcp_in
+		sbic	RCP_PIN, rcp_in
 		rjmp	boot_rx3
 		clc				; Receiving 0-bit
 boot_rx4:	in	r14, TIFR
 		sbrc	r14, TOV2
 		rjmp	boot_rx_bit		; Timeout, must be 0-bit
-		sbis	PIND, rcp_in
+		sbis	RCP_PIN, rcp_in
 		rjmp	boot_rx4
 
 boot_tx_bytes:
@@ -579,10 +583,10 @@ scmd_read_ee1:	rcall	boot_eeprom_rw		; Uses and increments byte address
 		st	X+, r16			; STATUS_CMD_OK at end
 		rjmp	scmd_send_chksum
 
-; For chip erase, we just nuke the EEPROM.
+; For chip erase, clear the flash before the boot loader and nuke the EEPROM.
 scmd_chip_erase:
-		clr	r12
-		clr	r13
+		rcall	boot_clear_flash	; Also clears r12:r13 for EEPROM address
+		nop
 		ldi	r24, low(EEPROMEND+1)
 		ldi	r25, high(EEPROMEND+1)
 		set
@@ -619,12 +623,14 @@ scmd_write_fl1:	ld	r0, Y+
 		rcall	boot_wr_flash		; use the normal boot_wr_flash
 scmd_write_fl2:	movw	ZL, r14			; Restore Z
 		rjmp	scmd_send_chksum
+; This is a shadow of boot_wr_flash and is to be used while the page containing
+; the usually-used boot_wr_flash is being erased and reflashed.
 scmd_write_fl3:	rcall	scmd_spm		; Erase page
 		ldi	r22, (1<<PGWRT)+(1<<SPMEN)
 		rcall	scmd_spm		; Write page
 		ldi	r22, (1<<RWWSRE)+(1<<SPMEN)
 		rcall	scmd_spm		; Re-enable RWW section
-		rjmp	scmd_write_fl2
+		rjmp	scmd_write_fl2		; Return
 scmd_spm_wait:	in	r23, SPMCR		; Wait for previous SPM to finish
 		sbrc	r23, SPMEN
 		rjmp	scmd_spm_wait
@@ -659,6 +665,39 @@ boot_eeprom_rw:	rcall	boot_spm_wait
 		sbi	EECR, EEMWE		; Write arming
 		out	EECR, r17		; Write
 		ret
+
+; Erase flash space before boot loader (used for "chip erase")
+boot_clear_flash:
+		movw	r14, ZL			; Save Z
+		ldi	ZL, low(BOOT_START)
+		ldi	ZH, high(BOOT_START)
+		ldi	r22, (1<<PGERS)+(1<<SPMEN)
+boot_clear_fl1:	sbiw	ZL, PAGESIZE
+		rcall	boot_spm		; Erase page (never this code)
+		brne	boot_clear_fl1
+		movw	r12, ZL			; Zero r12:r13 (for EEPROM address later)
+		movw	ZL, r14			; Restore Z
+		ret
+
+; Pad out the boot loader to work around avrdude verifying gaps
+		nop
+		nop
+		nop
+
+		nop
+		nop
+		nop
+		nop
+
+		nop
+		nop
+		nop
+		nop
+
+		nop
+		nop
+		nop
+		nop
 
 ; Keep these addresses within a page so that we can self-update.
 .org FLASHEND + 1 - 32

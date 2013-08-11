@@ -27,67 +27,6 @@
 .equ	BpFET_port	= PORTD
 .equ	CpFET_port	= PORTD
 
-.MACRO rcp_int_enable
-	ldi	@0, (1<<INT0)	; enable ext0int
-	out	GICR, @0
-.ENDMACRO
-.MACRO rcp_int_disable
-	out	GICR, ZH	; disable ext0int
-.ENDMACRO
-.MACRO rcp_int_rising_edge
-	ldi	@0, (1<<ISC01)+(1<<ISC00)
-	out	MCUCR, @0	; set next int0 to rising edge
-.ENDMACRO
-.MACRO rcp_int_falling_edge
-	ldi	@0, (1<<ISC01)
-	out	MCUCR, @0	; set next int0 to falling edge
-.ENDMACRO
-
-.MACRO ApFET_on
-	sbi	PORTD, ApFET
-.ENDMACRO
-.MACRO ApFET_off
-	cbi	PORTD, ApFET
-.ENDMACRO
-.MACRO BpFET_on
-	sbi	PORTD, BpFET
-.ENDMACRO
-.MACRO BpFET_off
-	cbi	PORTD, BpFET
-.ENDMACRO
-.MACRO CpFET_on
-	sbi	PORTD, CpFET
-.ENDMACRO
-.MACRO CpFET_off
-	cbi	PORTD, CpFET
-.ENDMACRO
-
-.MACRO ApFET_on_reg
-	sbr	@0, 1<<ApFET
-.ENDMACRO
-.MACRO ApFET_off_reg
-	cbr	@0, 1<<ApFET
-.ENDMACRO
-.MACRO BpFET_on_reg
-	sbr	@0, 1<<BpFET
-.ENDMACRO
-.MACRO BpFET_off_reg
-	cbr	@0, 1<<BpFET
-.ENDMACRO
-.MACRO CpFET_on_reg
-	sbr	@0, 1<<CpFET
-.ENDMACRO
-.MACRO CpFET_off_reg
-	cbr	@0, 1<<CpFET
-.ENDMACRO
-
-.MACRO all_pFETs_off
-	in	@0, PORTD
-	cbr	@0, (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
-	out	PORTD, @0
-.ENDMACRO
-
-
 ;*********************
 ; PORT C definitions *
 ;*********************
@@ -97,31 +36,14 @@
 .equ	mux_b		= 4	; ADC4 phase input
 ;.equ			= 3	; ADC3
 ;.equ			= 2	; ADC2 (plush has something on here)
-;.equ	temp_adc	= 1	; ADC1 temperature control input
-;.equ	accu_adc	= 0	; ADC0 voltage control input
+.equ	mux_temperature	= 1	; ADC1 temperature input
+.equ	mux_voltage	= 0	; ADC0 voltage input (10k from Vbat, 976 to gnd, 10.55V in -> .936V at ADC0)
+
+.equ	O_POWER		= 625	; 10k
+.equ	O_GROUND	= 61	; 976
 
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= 0
-
-.MACRO comp_init
-	in	@0, SFIOR
-	sbr	@0, (1<<ACME)	; set Analog Comparator Multiplexer Enable
-	out	SFIOR, @0
-.ENDMACRO
-.MACRO set_comp_phase_a
-	ldi	@0, mux_a	; set comparator multiplexer to phase A
-	out	ADMUX, @0
-	cbi	ADCSRA, ADEN	; disable ADC
-.ENDMACRO
-.MACRO set_comp_phase_b
-	ldi	@0, mux_b	; set comparator multiplexer to phase B
-	out	ADMUX, @0
-	cbi	ADCSRA, ADEN	; disable ADC
-.ENDMACRO
-.MACRO set_comp_phase_c	
-	sbi	ADCSRA, ADEN	; enable ADC and comparator to phase C (AIN1)
-.ENDMACRO
-
 
 ;*********************
 ; PORT B definitions *
@@ -141,55 +63,6 @@
 .equ	AnFET_port	= PORTB
 .equ	BnFET_port	= PORTB
 .equ	CnFET_port	= PORTB
-
-.MACRO AnFET_on
-	cbi	PORTB, AnFET
-.ENDMACRO
-.MACRO AnFET_off
-	sbi	PORTB, AnFET
-.ENDMACRO
-.MACRO BnFET_on
-	cbi	PORTB, BnFET
-.ENDMACRO
-.MACRO BnFET_off
-	sbi	PORTB, BnFET
-.ENDMACRO
-.MACRO CnFET_on
-	cbi	PORTB, CnFET
-.ENDMACRO
-.MACRO CnFET_off
-	sbi	PORTB, CnFET
-.ENDMACRO
-
-.MACRO AnFET_on_reg
-	cbr	@0, 1<<AnFET
-.ENDMACRO
-.MACRO AnFET_off_reg
-	sbr	@0, 1<<AnFET
-.ENDMACRO
-.MACRO BnFET_on_reg
-	cbr	@0, 1<<BnFET
-.ENDMACRO
-.MACRO BnFET_off_reg
-	sbr	@0, 1<<BnFET
-.ENDMACRO
-.MACRO CnFET_on_reg
-	cbr	@0, 1<<CnFET
-.ENDMACRO
-.MACRO CnFET_off_reg
-	sbr	@0, 1<<CnFET
-.ENDMACRO
-
-.MACRO nFET_brake
-	in	@0, PORTB
-	cbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
-	out	PORTB, @0
-.ENDMACRO
-.MACRO all_nFETs_off
-	in	@0, PORTB
-	sbr	@0, (1<<AnFET)+(1<<BnFET)+(1<<CnFET)
-	out	PORTB, @0
-.ENDMACRO
 
 .MACRO RED_on
 .ENDMACRO
