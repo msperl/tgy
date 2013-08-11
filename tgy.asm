@@ -1177,8 +1177,7 @@ rcpint_read_low:
 		; is stopped to check if the ESC is alive and connected.
 		lds	rx_h, com_count_h
 		lds	rx_l, com_count_l
-		ldi	i_temp2, high(0x1234)
-		ldi	i_temp1, low(0x1234)
+		ldi2	temp1, temp2, 0x1234
 		sts	com_count_h, i_temp2
 		sts	com_count_l, i_temp1
 		sbi	DDRB, 3			; MOSI as OUTPUT
@@ -2195,8 +2194,7 @@ evaluate_rc_uart:
 		breq	rc_duty_set		; Power off
 	; Scale so that YH == 32 is MAX_POWER.
 		movw	temp1, YL
-		ldi	temp3, low(0x100 * (POWER_RANGE - MIN_DUTY) / 32)
-		ldi	temp4, high(0x100 * (POWER_RANGE - MIN_DUTY) / 32)
+		ldi2	temp3, temp4, 0x100 * (POWER_RANGE - MIN_DUTY) / 32
 		rjmp	rc_do_scale		; The rest of the code is common
 .endif
 ;-----bko-----------------------------------------------------------------
@@ -2685,8 +2683,7 @@ control_disarm:
 		adiwx	temp1, temp2, 100	; Make sure OCF1B gets set
 		out	OCR1BH, temp2
 		out	OCR1BL, temp1
-		ldi	temp2, high(0x1234)
-		ldi	temp1, low(0x1234)
+		ldi2	temp1, temp2, 0x1234
 		sts	com_count_h, temp2
 		sts	com_count_l, temp1
 		.endif
