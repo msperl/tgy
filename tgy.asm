@@ -699,7 +699,7 @@ eeprom_defaults_w:
 		ldi	@0, T1CLK & ~(1<<ICES1)
 		out	TCCR1B, @0
 .endmacro
-.elif USE_INT0
+.elif USE_INT0 || USE_INT0S
 .macro rcp_int_enable
 		ldi	@0, (1<<INT0)	; enable ext_int0
 		out	GICR, @0
@@ -707,7 +707,7 @@ eeprom_defaults_w:
 .macro rcp_int_disable
 		out	GICR, ZH	; disable ext_int0
 .endmacro
-.if USE_INT0 == 1
+.if USE_INT0 == 1 || USE_INT0S == 1
 .macro rcp_int_rising_edge
 		ldi	@0, (1<<ISC01)+(1<<ISC00)
 		out	MCUCR, @0	; set next int0 to rising edge
@@ -716,7 +716,7 @@ eeprom_defaults_w:
 		ldi	@0, (1<<ISC01)
 		out	MCUCR, @0	; set next int0 to falling edge
 .endmacro
-.elif USE_INT0 == 2
+.elif USE_INT0 == 2 || USE_INT0S == 2
 .macro rcp_int_rising_edge
 		ldi	@0, (1<<ISC01)
 		out	MCUCR, @0	; set next int0 to falling edge
@@ -2192,7 +2192,7 @@ evaluate_rc_uart:
 		sbr	flags1, (1<<REVERSE)
 		cbr	YH, (1<<5)
 		adiw	YL, 0			; 16-bit zero-test
-		breq	rc_not_full
+		breq	rc_duty_set		; Power off
 	; Scale so that YH == 32 is MAX_POWER.
 		movw	temp1, YL
 		ldi	temp3, low(0x100 * (POWER_RANGE - MIN_DUTY) / 32)
