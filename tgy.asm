@@ -699,7 +699,7 @@ eeprom_defaults_w:
 		ldi	@0, T1CLK & ~(1<<ICES1)
 		out	TCCR1B, @0
 .endmacro
-.elif USE_INT0 || USE_INT0S
+.elif USE_INT0 || defined(USE_INT0S)
 .macro rcp_int_enable
 		ldi	@0, (1<<INT0)	; enable ext_int0
 		out	GICR, @0
@@ -707,7 +707,7 @@ eeprom_defaults_w:
 .macro rcp_int_disable
 		out	GICR, ZH	; disable ext_int0
 .endmacro
-.if USE_INT0 == 1 || USE_INT0S == 1
+.if USE_INT0 == 1
 .macro rcp_int_rising_edge
 		ldi	@0, (1<<ISC01)+(1<<ISC00)
 		out	MCUCR, @0	; set next int0 to rising edge
@@ -716,7 +716,7 @@ eeprom_defaults_w:
 		ldi	@0, (1<<ISC01)
 		out	MCUCR, @0	; set next int0 to falling edge
 .endmacro
-.elif USE_INT0 == 2 || USE_INT0S == 2
+.elif USE_INT0 == 2
 .macro rcp_int_rising_edge
 		ldi	@0, (1<<ISC01)
 		out	MCUCR, @0	; set next int0 to falling edge
@@ -724,6 +724,16 @@ eeprom_defaults_w:
 .macro rcp_int_falling_edge
 		ldi	@0, (1<<ISC01)+(1<<ISC00)
 		out	MCUCR, @0	; set next int0 to rising edge
+.endmacro
+.elif USE_INT0S == 1
+.macro rcp_int_rising_edge
+		ldi	@0, (1<<ISC01)+(1<<ISC00)
+		out	MCUCR, @0	; set next int0 to rising edge
+.endmacro
+.elif USE_INT0S == 2
+.macro rcp_int_rising_edge
+		ldi	@0, (1<<ISC01)
+		out	MCUCR, @0	; set next int0 to falling edge
 .endmacro
 .endif
 .endif
@@ -1019,7 +1029,7 @@ t1oca_int1:	sts	ocr1ax, i_temp1
 		reti
 
 t1ocb_int:
-	.if USE_INT0S
+	.if defined(USE_INT0S)
 		cbi	DDRB, 3				; MOSI as input
 		cbi	PORTB, 3			; No pull-up on MOSI
 		ldi	i_temp1, 100
@@ -1124,7 +1134,7 @@ rcpint_exit:	rcp_int_rising_edge i_temp1	; Set next int to rising edge
 ; With a single interrupt to handle all the receiving and sending we were
 ; blocking the main program for too long and glitches were seen.
 ; rx_l and rx_h are being abused as our state variable (read/write buffer).
-	.if USE_INT0S
+	.if defined(USE_INT0S)
 		in	i_sreg, SREG
 
 		inc	read_state
@@ -1957,7 +1967,7 @@ adc_wait:	sbic	ADCSRA, ADSC
 ; internal RC slows down when hot, making it impossible to reach full
 ; throttle.
 evaluate_rc_init:
-		.if USE_UART || USE_INT0S
+		.if USE_UART || defined(USE_INT0S)
 		sbrc	flags1, UART_MODE
 		rjmp	evaluate_rc_uart
 		.endif
@@ -2045,7 +2055,7 @@ rc_prog_done:	rcall	eeprom_write_block
 ;-----bko-----------------------------------------------------------------
 ; These routines may clobber temp* and Y, but not X.
 evaluate_rc:
-		.if USE_UART || USE_INT0S
+		.if USE_UART || defined(USE_INT0S)
 		sbrc	flags1, UART_MODE
 		rjmp	evaluate_rc_uart
 		.endif
@@ -2123,7 +2133,7 @@ rc_duty_set:	sts	rc_duty_l, YL
 		sts	rc_duty_h, YH
 		sbrs	flags0, SET_DUTY
 		rjmp	rc_no_set_duty
-		.if USE_INT0S
+		.if defined(USE_INT0S)
 		ldi	temp1, 64		; about 4s for serial
 		.else
 		ldi	temp1, 2
@@ -2173,7 +2183,7 @@ evaluate_rc_uart:
 		rjmp	rc_do_scale		; The rest of the code is common
 .endif
 ;-------------------------------------------------------------------------
-.if USE_INT0S
+.if defined(USE_INT0S)
 evaluate_rc_uart:
 		cli
 		movw	YL, rx_l		; Copy 16-bit input
@@ -2639,7 +2649,7 @@ control_disarm:
 
 	; Enable timer interrupts (we only do this late to improve beep quality)
 		ldi	temp1, (1<<TOIE1)+(1<<OCIE1A)+(1<<TOIE2)
-		.if USE_INT0S
+		.if defined(USE_INT0S)
 		sbr	temp1, (1<<TOIE2)
 		.endif
 		out	TIFR, temp1		; Clear TOIE1, OCIE1A, and TOIE2 flags
@@ -2673,11 +2683,11 @@ control_disarm:
 		.if USE_I2C
 		rcall	i2c_init
 		.endif
-		.if USE_INT0 || USE_ICP || USE_INT0S
+		.if USE_INT0 || USE_ICP || defined(USE_INT0S)
 		rcp_int_rising_edge temp1
 		rcp_int_enable temp1
 		.endif
-		.if USE_INT0S
+		.if defined(USE_INT0S)
 		in	temp1, TCNT1L
 		in	temp2, TCNT1H
 		adiwx	temp1, temp2, 100	; Make sure OCF1B gets set
@@ -2718,7 +2728,7 @@ i_rc_puls_rx:	rcall	evaluate_rc_init
 		lds	YH, rc_duty_h
 		adiw	YL, 0			; Test for zero
 		brne	i_rc_puls1
-		.if USE_INT0S
+		.if defined(USE_INT0S)
 		; A single command is enough so as to allow slow rates
 		.else
 		ldi	temp1, 10		; wait for this count of receiving power off
@@ -2839,7 +2849,7 @@ start_from_running:
 		; last_tcnt1 and set the duty (limited by STARTUP) and
 		; set POWER_ON.
 		rcall	wait_timeout
-		.if USE_INT0S
+		.if defined(USE_INT0S)
 		ldi	temp1, 64
 		.else
 		ldi	temp1, 2		; Start with a short timeout to stop quickly
