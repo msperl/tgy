@@ -268,6 +268,8 @@
 	.equ	SET_DUTY	= 1	; if set when armed, set duty during evaluate_rc
 ;	.equ	I_pFET_HIGH	= 2	; set if over-current detect
 ;	.equ	GET_STATE	= 3	; set if state is to be send
+	.equ	COMP_PHASE_A	= 2	; next comparator multiplexer phase is A
+	.equ	COMP_PHASE_B	= 3	; next comparator multiplexer phase is B
 	.equ	EEPROM_RESET	= 4	; if set, reset EEPROM
 	.equ	EEPROM_WRITE	= 5	; if set, save settings to EEPROM
 	.equ	UART_SYNC	= 6	; if set, we are waiting for our serial throttle byte
@@ -758,27 +760,13 @@ eeprom_defaults_w:
 	.endif
 .endmacro
 .macro comp_adc_enable
-		sbi	ADCSRA, ADEN	; Eisable ADC to effectively disable ACME
+		sbi	ADCSRA, ADEN	; Enable ADC to effectively disable ACME
 .endmacro
-.macro set_comp_phase_a
-	.if defined(mux_a)
-		ldi	@0, mux_a	; set comparator multiplexer to phase A
-		out	ADMUX, @0
-		comp_adc_disable
-	.else
-		comp_adc_enable
-	.endif
-.endmacro
-.macro set_comp_phase_b
-	.if defined(mux_b)
-		ldi	@0, mux_b	; set comparator multiplexer to phase B
-		out	ADMUX, @0
-		comp_adc_disable
-	.else
-		comp_adc_enable
-	.endif
-.endmacro
-.macro set_comp_phase_c
+.macro start_comp_phase
+		sbrc	flags0, COMP_PHASE_A
+		rjmp	phase_a
+		sbrc	flags0, COMP_PHASE_B
+		rjmp	phase_b
 	.if defined(mux_c)
 		ldi	@0, mux_c	; set comparator multiplexer to phase C
 		out	ADMUX, @0
@@ -786,6 +774,35 @@ eeprom_defaults_w:
 	.else
 		comp_adc_enable
 	.endif
+		rjmp	start_comp_phase_done
+phase_a:
+	.if defined(mux_a)
+		ldi	@0, mux_a	; set comparator multiplexer to phase A
+		out	ADMUX, @0
+		comp_adc_disable
+	.else
+		comp_adc_enable
+	.endif
+		rjmp	start_comp_phase_done
+phase_b:
+	.if defined(mux_b)
+		ldi	@0, mux_b	; set comparator multiplexer to phase B
+		out	ADMUX, @0
+		comp_adc_disable
+	.else
+		comp_adc_enable
+	.endif
+start_comp_phase_done:
+.endmacro
+.macro set_comp_phase_a
+		sbr	flags0, (1<<COMP_PHASE_A)
+.endmacro
+.macro set_comp_phase_b
+		cbr	flags0, (1<<COMP_PHASE_A)
+		sbr	flags0, (1<<COMP_PHASE_B)
+.endmacro
+.macro set_comp_phase_c
+		cbr	flags0, (1<<COMP_PHASE_A)+(1<<COMP_PHASE_B)
 .endmacro
 
 ;-- Timing and motor debugging macros ------------------------------------
@@ -2948,7 +2965,7 @@ wait_for_power_rx:
 
 start_from_running:
 		rcall	switch_power_off
-		sbrc	flags2, BLIND_WAIT
+		sbrc	flags2, BLIND_WAIT	; wait for any ADC op to end
 		rjmp	start_from_running
 		comp_init temp1			; init comparator
 		RED_off
@@ -3314,6 +3331,9 @@ wait_pwm_enable:
 wait_pwm_running:
 		sbrs	flags1, STARTUP
 		rjmp	wait_for_blank
+		sbrc	flags2, BLIND_WAIT
+		rjmp	wait_blindly
+		start_comp_phase temp1
 .if defined(START_DELAY_US)
 		ldi3	YL, YH, temp4, START_DELAY_US * CPU_MHZ
 		mov	temp7, temp4
@@ -3348,6 +3368,7 @@ wait_for_blank:
 		rcall	wait_OCT1_tot		; Wait for the minimum blanking period
 		sbrc	flags2, BLIND_WAIT
 		rjmp	wait_blindly
+		start_comp_phase temp1
 
 		ldi	temp4, (13+29) * 256 / 120
 		rcall	set_timing_degrees	; Set timeout for maximum blanking period
@@ -3446,6 +3467,7 @@ start_adc_read:
 .if defined(mux_temperature)
 		ldi	temp1, 0xc0 + mux_temperature
 .endif
+		out	SFIOR, ZH	; Disable comparator mux and start adc
 		out	ADMUX, temp1
 		ldi	temp1, (1 << ADEN) + (1 << ADSC) + (1 << ADIE) + 4
 		out	ADCSRA, temp1
