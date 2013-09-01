@@ -47,8 +47,10 @@
 ;.equ			= 0	; ADC0
 
 ; CHECK THIS
-.equ	O_POWER		= 47
-.equ	O_GROUND	= 2
+.equ	O_POWER		= 470
+.equ	O_GROUND	= 47
+
+.equ	adc_refs	= (1<<REFS1)+(1<<REFS0)	; Only 2.56V seems to work
 
 .equ	INIT_PC		= 0
 .equ	DIR_PC		= 0

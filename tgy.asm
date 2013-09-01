@@ -3453,19 +3453,22 @@ wait_blindly:
 
 start_adc_read:
 		cbr	flags2, (1 << READ_ADC)
+.if !defined(adc_refs)
+.equ adc_refs = (1<<REFS0)	; AVcc (5V)
+.endif
 .if defined(mux_voltage) || defined(mux_temperature)
 		sbr	flags2, (1 << BLIND_WAIT)
 		; Note we can set the mux and start the ADC conversion and
 		; let the main loop call set_comp_phase* because ADMUX is
 		; cached at the start of the conversion
 .if defined(mux_voltage)
-		ldi	temp1, 0xc0 + mux_voltage
+		ldi	temp1, adc_refs + mux_voltage
 .endif
 .if defined(mux_voltage) && defined(mux_temperature)
 		sbrs	flags2, ADC_VOLTAGE
 .endif
 .if defined(mux_temperature)
-		ldi	temp1, 0xc0 + mux_temperature
+		ldi	temp1, adc_refs + mux_temperature
 .endif
 		out	SFIOR, ZH	; Disable comparator mux and start adc
 		out	ADMUX, temp1
