@@ -345,6 +345,7 @@ neutral_h:	.byte	1
 i2c_max_pwm:	.byte	1	; MaxPWM for MK (NOTE: 250 while stopped is magic and enables v2)
 i2c_rx_state:	.byte	1
 i2c_blc_offset:	.byte	1
+i2c_tx_cache:	.byte	1
 .endif
 motor_count:	.byte	1	; Motor number for serial control
 com_count_l:	.byte	1	; Commutations count since last serial read
@@ -1235,6 +1236,7 @@ rcpint_nop:
 ; Ctrl-click Settings in MKTool for reversing and additional settings
 i2c_int:
 	.if USE_I2C
+	.if !defined(SIMPLE_I2C)
 		in	i_sreg, SREG
 		in	i_temp1, TWSR
 		cpi	i_temp1, 0x60		; rx: received our SLA+W
@@ -1338,6 +1340,100 @@ i2c_rx_blccsum:	in	i_temp1, TWDR		; We can't do anything with the checksum, so j
 		sts	blc_setmask, i_temp2
 		sts	blc_checksum, i_temp1
 		rjmp	i2c_ack
+	.else
+	; A simple I2C protocol with telemetry feedback
+	; Our "register map" will be seen as follows:
+	;  0x00  (write-only)  Throttle high (MSB is the motor reverse bit)
+	;  0x01  (write-only)  Throttle low
+	;  0x02  (read-only)   Revolution counter high
+	;  0x03  (read-only)   Revolution counter low
+	;  0x04  (read-only)   Vbat high
+	;  0x05  (read-only)   Vbat low
+	;  0x06  (read-only)   Temperature high
+	;  0x07  (read-only)   Temperature low
+	;  0x08  (read-only)   Identification (0xab)
+	; Address gets auto-incremented.
+	; TODO: expose O_GROUND, O_POWER, etc.?
+		in	i_sreg, SREG
+		in	i_temp1, TWSR
+		cpi	i_temp1, 0x60		; rx: received our SLA+W
+		breq	i2c_rx_start
+		cpi	i_temp1, 0x80		; rx: data available, previously ACKed
+		breq	i2c_rx_data
+		cpi	i_temp1, 0xa0		; rx: stop/restart condition (end of message)
+		breq	i2c_ack
+		cpi	i_temp1, 0xa8		; tx: received our SLA+R
+		breq	i2c_tx_init
+		cpi	i_temp1, 0xb8		; tx: data request, previously ACKed
+		breq	i2c_tx_data
+		cpi	i_temp1, 0xf8		; tx: no relevant state information
+		breq	i2c_io_error
+		cpse	i_temp1, ZH		; Bus error due to illegal start/stop condition
+		rjmp	i2c_ack			; 0x88, 0xc0, etc.: enable listening
+i2c_io_error:	ldi	i_temp1, (1<<TWIE)|(1<<TWEN)|(1<<TWSTO)|(1<<TWEA)|(1<<TWINT)
+		rjmp	i2c_out
+
+i2c_nack:	ldi	i_temp1, (1<<TWIE)|(1<<TWEN)|(1<<TWINT)
+		rjmp	i2c_out
+i2c_ack:	ldi	i_temp1, (1<<TWIE)|(1<<TWEN)|(1<<TWEA)|(1<<TWINT)
+i2c_out:	out	TWCR, i_temp1
+		out	SREG, i_sreg
+		reti
+
+i2c_rx_start:	sts	i2c_rx_state, ZH
+		rjmp	i2c_ack
+
+i2c_rx_data:	lds	i_temp1, i2c_rx_state
+		in	i_temp2, TWDR
+		cpse	i_temp1, ZH		; Skip if address byte
+		rjmp	i2c_rx_value
+		sbr	i_temp2, 0x80		; Make it non-zero
+		sts	i2c_rx_state, i_temp2	; Save the address
+		rjmp	i2c_ack
+i2c_rx_value:	inc	i_temp1
+		sts	i2c_rx_state, i_temp1	; Save updated address
+		cpi	i_temp1, 0x81
+		breq	i2c_rx_hi
+		cpi	i_temp1, 0x82
+		breq	i2c_rx_lo
+		rjmp	i2c_ack			; Discard
+i2c_rx_hi:	mov	rx_h, i_temp2
+		rjmp	i2c_ack
+i2c_rx_lo:	mov	rx_l, i_temp2
+		sbr	flags1, (1<<EVAL_RC)|(1<<I2C_MODE)	; i2c message received
+		rjmp	i2c_ack
+
+i2c_tx_init:
+i2c_tx_data:	lds	i_temp1, i2c_rx_state
+		inc	i_temp1
+		sts	i2c_rx_state, i_temp1	; Save updated address
+		sbrc	i_temp1, 0
+		rjmp	i2c_tx_hi
+		lds	i_temp1, i2c_tx_cache	; Low byte cached when hi read
+		out	TWDR, i_temp1		; Send the cached value
+		rjmp	i2c_ack
+i2c_tx_hi:	cpi	i_temp1, 0x83
+		breq	i2c_tx_rev
+		cpi	i_temp1, 0x85
+		breq	i2c_tx_vbat
+		cpi	i_temp1, 0x87
+		breq	i2c_tx_temp
+		ldi2	i_temp1, i_temp2, 0xabab	; Send the ID
+i2c_tx_do:	out	TWDR, i_temp1
+		sts	i2c_tx_cache, i_temp2
+		rjmp	i2c_ack
+i2c_tx_rev:	lds	i_temp1, com_count_h
+		lds	i_temp2, com_count_l
+		sts	com_count_h, ZH
+		sts	com_count_l, ZH
+		rjmp	i2c_tx_do
+i2c_tx_vbat:	lds	i_temp1, vbat_h
+		lds	i_temp2, vbat_l
+		rjmp	i2c_tx_do
+i2c_tx_temp:	lds	i_temp1, adctemp_h
+		lds	i_temp2, adctemp_l
+		rjmp	i2c_tx_do
+	.endif
 	.endif
 ;-----bko-----------------------------------------------------------------
 urxc_int:
@@ -2133,7 +2229,7 @@ rc_duty_set:	sts	rc_duty_l, YL
 		sts	rc_duty_h, YH
 		sbrs	flags0, SET_DUTY
 		rjmp	rc_no_set_duty
-		.if defined(USE_INT0S)
+		.if defined(USE_INT0S) || defined(SIMPLE_I2C)
 		ldi	temp1, 64		; about 4s for serial
 		.else
 		ldi	temp1, 2
@@ -2148,6 +2244,7 @@ rc_no_set_duty:	ldi	temp1, RCP_TOT
 .if USE_I2C
 evaluate_rc_i2c:
 		movw	YL, rx_l		; Atomic copy of 16-bit input
+	.if !defined(SIMPLE_I2C)
 		cbr	flags1, (1<<EVAL_RC)
 	; Load settings from BLConfig structure (BL-Ctrl v2)
 		lds	temp1, blc_bitconfig
@@ -2168,6 +2265,22 @@ evaluate_rc_i2c:
 		movw	temp1, YL
 		ldi2	temp3, temp4, 0x100 * (POWER_RANGE - MIN_DUTY) / 247
 		rjmp	rc_do_scale		; The rest of the code is common
+	.else
+		cbr	flags1, (1<<EVAL_RC)+(1<<REVERSE)
+		.if MOTOR_REVERSE
+		sbrc	YH, 7
+		.else
+		sbrs	YH, 7
+		.endif
+		sbr	flags1, (1<<REVERSE)
+		cbr	YH, (1<<7)
+		adiw	YL, 0			; 16-bit zero-test
+		breq	rc_duty_set		; Power off
+	; Scale so that Y == 32767 is MAX_POWER.
+		movw	temp1, YL
+		ldi2	temp3, temp4, 0x10000 * (POWER_RANGE - MIN_DUTY) / 32767
+		rjmp	rc_do_scale		; The rest of the code is common
+	.endif
 .endif
 ;-----bko-----------------------------------------------------------------
 .if USE_UART
@@ -2728,7 +2841,7 @@ i_rc_puls_rx:	rcall	evaluate_rc_init
 		lds	YH, rc_duty_h
 		adiw	YL, 0			; Test for zero
 		brne	i_rc_puls1
-		.if defined(USE_INT0S)
+		.if defined(USE_INT0S) || defined(SIMPLE_I2C)
 		; A single command is enough so as to allow slow rates
 		.else
 		ldi	temp1, 10		; wait for this count of receiving power off
@@ -2849,7 +2962,7 @@ start_from_running:
 		; last_tcnt1 and set the duty (limited by STARTUP) and
 		; set POWER_ON.
 		rcall	wait_timeout
-		.if defined(USE_INT0S)
+		.if defined(USE_INT0S) || defined(SIMPLE_I2C)
 		ldi	temp1, 64
 		.else
 		ldi	temp1, 2		; Start with a short timeout to stop quickly

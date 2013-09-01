@@ -9,6 +9,7 @@
 .equ	USE_I2C		= 1
 .equ	USE_UART	= 1
 .equ	USE_ICP		= 1
+.equ	SIMPLE_I2C	= 1
 
 .equ	DEAD_LOW_NS	= 300
 .equ	DEAD_HIGH_NS	= 300
