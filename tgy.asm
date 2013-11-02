@@ -1255,20 +1255,18 @@ i2c_int:
 	.if !defined(SIMPLE_I2C)
 		in	i_sreg, SREG
 		in	i_temp1, TWSR
-		cpi	i_temp1, 0x60		; rx: received our SLA+W
-		breq	i2c_ack
 		cpi	i_temp1, 0x80		; rx: data available, previously ACKed
 		breq	i2c_rx_data
-		cpi	i_temp1, 0xa0		; rx: stop/restart condition (end of message)
-		breq	i2c_rx_stop
 		cpi	i_temp1, 0xa8		; tx: received our SLA+R
 		breq	i2c_tx_init
 		cpi	i_temp1, 0xb8		; tx: data request, previously ACKed
 		breq	i2c_tx_data
 		cpi	i_temp1, 0xf8		; tx: no relevant state information
-		breq	i2c_io_error
+		breq	i2c_nop
+		cpi	i_temp1, 0xb0		; same as 0xa8
+		breq	i2c_tx_init
 		cpse	i_temp1, ZH		; Bus error due to illegal start/stop condition
-		rjmp	i2c_ack			; 0x88, 0xc0, etc.: enable listening
+		rjmp	i2c_ack			; 0x60, 0x68, 0x88, 0xa0, 0xc0, etc.: enable listening
 i2c_io_error:	ldi	i_temp1, (1<<TWIE)|(1<<TWEN)|(1<<TWSTO)|(1<<TWEA)|(1<<TWINT)
 		rjmp	i2c_out
 
@@ -1304,7 +1302,7 @@ i2c_nack:	ldi	i_temp1, (1<<TWIE)|(1<<TWEN)|(1<<TWINT)
 		rjmp	i2c_out
 i2c_ack:	ldi	i_temp1, (1<<TWIE)|(1<<TWEN)|(1<<TWEA)|(1<<TWINT)
 i2c_out:	out	TWCR, i_temp1
-		out	SREG, i_sreg
+i2c_nop:	out	SREG, i_sreg
 		reti
 
 i2c_rx_stop:	lds	i_temp1, i2c_rx_state
@@ -1376,16 +1374,18 @@ i2c_rx_blccsum:	in	i_temp1, TWDR		; We can't do anything with the checksum, so j
 		breq	i2c_rx_start
 		cpi	i_temp1, 0x80		; rx: data available, previously ACKed
 		breq	i2c_rx_data
-		cpi	i_temp1, 0xa0		; rx: stop/restart condition (end of message)
-		breq	i2c_ack
 		cpi	i_temp1, 0xa8		; tx: received our SLA+R
 		breq	i2c_tx_init
 		cpi	i_temp1, 0xb8		; tx: data request, previously ACKed
 		breq	i2c_tx_data
 		cpi	i_temp1, 0xf8		; tx: no relevant state information
-		breq	i2c_io_error
+		breq	i2c_nop
+		cpi	i_temp1, 0x68		; same as 0x60
+		breq	i2c_rx_start
+		cpi	i_temp1, 0xb0		; same as 0xa8
+		breq	i2c_tx_init
 		cpse	i_temp1, ZH		; Bus error due to illegal start/stop condition
-		rjmp	i2c_ack			; 0x88, 0xc0, etc.: enable listening
+		rjmp	i2c_ack			; 0x88, 0xa0, 0xc0, etc.: enable listening
 i2c_io_error:	ldi	i_temp1, (1<<TWIE)|(1<<TWEN)|(1<<TWSTO)|(1<<TWEA)|(1<<TWINT)
 		rjmp	i2c_out
 
@@ -1393,7 +1393,7 @@ i2c_nack:	ldi	i_temp1, (1<<TWIE)|(1<<TWEN)|(1<<TWINT)
 		rjmp	i2c_out
 i2c_ack:	ldi	i_temp1, (1<<TWIE)|(1<<TWEN)|(1<<TWEA)|(1<<TWINT)
 i2c_out:	out	TWCR, i_temp1
-		out	SREG, i_sreg
+i2c_nop:	out	SREG, i_sreg
 		reti
 
 i2c_rx_start:	sts	i2c_rx_state, ZH
