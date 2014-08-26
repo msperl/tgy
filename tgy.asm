@@ -185,7 +185,7 @@
 .equ	CELL_MAX_DV	= 43	; Maximum battery cell deciV
 .equ	CELL_MIN_DV	= 35	; Minimum battery cell deciV
 .equ	CELL_COUNT	= 0	; 0: auto, >0: hard-coded number of cells (for reliable LVC > ~4S)
-.equ	BLIP_CELL_COUNT	= 0	; Blip out cell count before arming
+.equ	BLIP_CELL_COUNT	= 1	; Blip out cell count before arming
 .equ	DEBUG_ADC_DUMP	= 0	; Output an endless loop of all ADC values (no normal operation)
 .equ	MOTOR_DEBUG	= 0	; Output sync pulses on MOSI or SCK, debug flag on MISO
 
