@@ -1,7 +1,7 @@
 ;********************************************
-;* Keda 12A with all FETs on PORTD          *
-;* Original fuses are unknown.              *
-;* On birdie they are lfuse:0xbf hfuse:0xc1 *
+;* Multistar 30A with all NFETs on PORTD    *
+;* Same as kda but with inverted high side  *
+;* Original fuses are lfuse:0x9f hfuse:0xc9 *
 ;********************************************
 
 .equ	F_CPU		= 16000000
@@ -22,7 +22,7 @@
 .equ	AnFET		= 1	;o
 .equ	BnFET		= 0	;o
 
-.equ	INIT_PD		= 0
+.equ	INIT_PD		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
 .equ	DIR_PD		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET)+(1<<AnFET)+(1<<BnFET)+(1<<CnFET)
 
 .equ	ApFET_port	= PORTD
