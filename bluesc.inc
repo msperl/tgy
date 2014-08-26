@@ -10,8 +10,8 @@
 .equ	USE_UART	= 1
 .equ	USE_ICP		= 1
 
-.equ	DEAD_LOW_NS	= 2200; Is 300 originally
-.equ	DEAD_HIGH_NS	= 24000; Is 300 originally
+.equ	DEAD_LOW_NS	= 300;
+.equ	DEAD_HIGH_NS	= 300;
 .equ	MOTOR_ADVANCE	= 15
 .equ	CHECK_HARDWARE	= 1
 
