@@ -27,7 +27,8 @@
 .equ	CpFET		= 1	;o
 .equ	rcp_in		= 0	;i r/c pulse input
 
-.equ	INIT_PB		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
+.equ	INIT_PB		= 0 ; p-fet on high-side.
+;.equ	INIT_PB		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET) ; n-fet
 .equ	DIR_PB		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
 
 .equ	ApFET_port	= PORTB
