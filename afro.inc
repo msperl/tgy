@@ -11,6 +11,7 @@
 
 .equ	DEAD_LOW_NS	= 2200
 .equ	DEAD_HIGH_NS 	= 24000
+.equ	CHECK_HARDWARE	= 1
 
 ;*********************
 ; PORT B definitions *

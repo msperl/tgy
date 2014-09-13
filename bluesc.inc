@@ -27,8 +27,7 @@
 .equ	CpFET		= 1	;o
 .equ	rcp_in		= 0	;i r/c pulse input
 
-.equ	INIT_PB		= 0 ; p-fet on high-side.
-;.equ	INIT_PB		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET) ; n-fet
+.equ	INIT_PB		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
 .equ	DIR_PB		= (1<<ApFET)+(1<<BpFET)+(1<<CpFET)
 
 .equ	ApFET_port	= PORTB
@@ -42,7 +41,7 @@
 ;.equ	= 6	;
 .equ	i2c_clk		= 5	; ADC5/SCL
 .equ	i2c_data	= 4	; ADC4/SDA
-.equ	mux_temperature = 3	; Not used on BlueESC
+;.equ	mux_temperature = 3	; Not used on BlueESC
 .equ	mux_c		= 2	; ADC2 phase input
 .equ	mux_b		= 1	; ADC1 phase input
 .equ	mux_a		= 0	; ADC0 phase input
