@@ -204,7 +204,7 @@
 .equ	MID_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS) / 2	; Neutral when RC_PULS_REVERSE = 1
 
 .if	RC_PULS_REVERSE
-.equ	RCP_DEADBAND	= 50	; Do not start until this much above or below neutral
+.equ	RCP_DEADBAND	= 25	; Do not start until this much above or below neutral
 .equ	PROGRAM_RC_PULS	= (STOP_RC_PULS + FULL_RC_PULS * 3) / 4	; Normally 1660
 .else
 .equ	RCP_DEADBAND	= 0
