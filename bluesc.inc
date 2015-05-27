@@ -51,7 +51,7 @@
 .equ	mux_voltage	= 6	;
 .equ	i2c_clk		= 5	; ADC5/SCL
 .equ	i2c_data	= 4	; ADC4/SDA
-;.equ  mux_current = 3 ;x
+.equ  mux_current = 3 ;x
 .equ	mux_c		= 2	; ADC2 phase input
 .equ	mux_b		= 1	; ADC1 phase input
 .equ	mux_a		= 0	; ADC0 phase input
