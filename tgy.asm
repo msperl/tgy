@@ -92,6 +92,8 @@
 #include "arctictiger.inc"	; Arctic Tiger 30A ESC with all nFETs (ICP PWM)
 #elif defined(birdie70a_esc)
 #include "birdie70a.inc"	; Birdie 70A with all nFETs (INT0 PWM)
+#elif defined(bluesc_esc)
+#include "bluesc.inc"	; Blue Robotics BlueESC (ICP PWM, I2C)
 #elif defined(mkblctrl1_esc)
 #include "mkblctrl1.inc"	; MK BL-Ctrl v1.2 (ICP PWM, I2C, UART, high side PWM, sense hack)
 #elif defined(bs_esc)
@@ -290,6 +292,7 @@
 	.equ	BLIND_WAIT	= 3	; ADC is busy so wait for ZC blindly
 	.equ	READ_ADC	= 4	; it's time to read temp. or voltage
 	.equ	ADC_VOLTAGE	= 5	; whether voltage or temp. is read next
+	.equ  ADC_CURRENT = 6 ; whether current is read instead of voltage/temp
 	.equ	SKIP_CPWM	= 7	; if set, skip complementary PWM (for short off period)
 .def	read_state	= r19		; int0s communication state
 .def	i_temp1		= r20		; interrupt temporary
@@ -350,11 +353,13 @@ i2c_tx_cache:	.byte	1
 .endif
 motor_count:	.byte	1	; Motor number for serial control
 com_count_l:	.byte	1	; Commutations count since last serial read
-com_count_h:	.byte	1
-adctemp_l:	.byte	1	; Temperature
-adctemp_h:	.byte	1
+com_count_h:	.byte	1 ;
+adctemp_l:	.byte	1	; temp
+adctemp_h:	.byte	1 ;
 vbat_l:		.byte	1	; Voltage
 vbat_h:		.byte	1
+adccurr_l:  .byte 1 ; Current
+adccurr_h:  .byte 1
 brake_sub:	.byte	1	; Brake speed subtrahend (power of two)
 brake_want:	.byte	1	; Type of brake desired
 brake_active:	.byte	1	; Type of brake active
@@ -1443,7 +1448,7 @@ i2c_tx_rev:	lds	i_temp1, com_count_h
 		sts	com_count_h, ZH
 		sts	com_count_l, ZH
 		rjmp	i2c_tx_do
-i2c_tx_vbat:	lds	i_temp1, vbat_h
+i2c_tx_vbat:		lds	i_temp1, vbat_h
 		lds	i_temp2, vbat_l
 		rjmp	i2c_tx_do
 i2c_tx_temp:	lds	i_temp1, adctemp_h
@@ -3159,7 +3164,7 @@ run1:		.if MOTOR_REVERSE
 		.endif
 		rjmp	run_reverse
 
-run_forward:	rcall	wait_for_high
+run_forward:		rcall	wait_for_high
 		com1com2
 		sync_off
 		rcall	wait_for_low
@@ -3224,7 +3229,8 @@ run6:
 		ldi2	temp1, temp2, PWR_MAX_START
 		rjmp	run6_3
 
-run6_2:		cbr	flags1, (1<<STARTUP)
+run6_2:		
+		cbr	flags1, (1<<STARTUP)
 		RED_off
 		; Build up sys_control to MAX_POWER in steps.
 		; If SLOW_THROTTLE is disabled, this only limits
@@ -3450,6 +3456,11 @@ wait_blindly:
 		rcall	wait_OCT1_tot
 		rjmp	wait_commutation
 
+; ADC reading happens with the following bits:
+; ADC_VOLTAGE    ADC_CURRENT    RESULT
+;      0              0          temp
+;      1              0          vbat
+;     1/0             1          curr
 start_adc_read:
 		cbr	flags2, (1 << READ_ADC)
 .if !defined(adc_refs)
@@ -3469,6 +3480,12 @@ start_adc_read:
 .if defined(mux_temperature)
 		ldi	temp1, adc_refs + mux_temperature
 .endif
+.if (defined(mux_voltage) || defined(mux_temperature)) && defined(mux_current)
+		sbrc  flags2, ADC_CURRENT
+.endif
+.if defined(mux_current)
+		ldi	temp1, adc_refs + mux_current
+.endif
 		out	SFIOR, ZH	; Disable comparator mux and start adc
 		out	ADMUX, temp1
 		ldi	temp1, (1 << ADEN) + (1 << ADSC) + (1 << ADIE) + 4
@@ -3482,6 +3499,12 @@ adc_int:
 		sbi	ADMUX, ADLAR
 		in	i_temp1, ADCL
 		in	i_temp2, ADCH
+.if (defined(mux_voltage) || defined(mux_temperature)) && defined(mux_current)
+		sbrc  flags2, ADC_CURRENT
+.endif
+.if defined(mux_current)
+		rjmp save_current
+.endif
 .if defined(mux_voltage) && defined(mux_temperature)
 		sbrs	flags2, ADC_VOLTAGE
 .endif
@@ -3492,9 +3515,16 @@ adc_int:
 		sts	vbat_h, i_temp2
 		cbr	flags2, (1 << ADC_VOLTAGE)
 		reti
-save_temp:	sts	adctemp_l, i_temp1
+save_temp:	
+		sts	adctemp_l, i_temp1
 		sts	adctemp_h, i_temp2
 		sbr	flags2, (1 << ADC_VOLTAGE)
+		sbr flags2, (1 << ADC_CURRENT)
+		reti
+save_current:
+		sts	adccurr_l, i_temp1
+		sts	adccurr_h, i_temp2
+		cbr	flags2, (1 << ADC_CURRENT)
 		reti
 
 ;-----bko-----------------------------------------------------------------
