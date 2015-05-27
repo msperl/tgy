@@ -1370,7 +1370,9 @@ i2c_rx_blccsum:	in	i_temp1, TWDR		; We can't do anything with the checksum, so j
 	;  0x05  (read-only)   Vbat low
 	;  0x06  (read-only)   Temperature high
 	;  0x07  (read-only)   Temperature low
-	;  0x08  (read-only)   Identification (0xab)
+	;  0x08  (read-only)   Current high
+	;  0x09  (read-only)   Current low
+	;  0x0A  (read-only)   Identification (0xab)
 	; Address gets auto-incremented.
 	; TODO: expose O_GROUND, O_POWER, etc.?
 		in	i_sreg, SREG
@@ -1439,6 +1441,8 @@ i2c_tx_hi:	cpi	i_temp1, 0x83
 		breq	i2c_tx_vbat
 		cpi	i_temp1, 0x87
 		breq	i2c_tx_temp
+		cpi	i_temp1, 0x89
+		breq	i2c_tx_curr
 		ldi2	i_temp1, i_temp2, 0xabab	; Send the ID
 i2c_tx_do:	out	TWDR, i_temp1
 		sts	i2c_tx_cache, i_temp2
@@ -1453,6 +1457,9 @@ i2c_tx_vbat:		lds	i_temp1, vbat_h
 		rjmp	i2c_tx_do
 i2c_tx_temp:	lds	i_temp1, adctemp_h
 		lds	i_temp2, adctemp_l
+		rjmp	i2c_tx_do
+i2c_tx_curr:	lds	i_temp1, adccurr_h
+		lds	i_temp2, adccurr_l
 		rjmp	i2c_tx_do
 	.endif
 	.endif
