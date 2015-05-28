@@ -1065,8 +1065,12 @@ t1ovfl_int:	in	i_sreg, SREG
 		inc	i_temp1
 		sts	tcnt1x, i_temp1
 		brne	timeout_check
-		sbr	flags2, (1 << READ_ADC)		; Every 256 overflows
-timeout_check:	andi	i_temp1, 15			; Every 16 overflows
+		;sbr	flags2, (1 << READ_ADC)		; Every 256 overflows
+timeout_check:	
+		andi  i_temp1, 63     ; Every 64 overflows
+		breq trigger_adc
+		lds i_temp1, tcnt1x
+		andi	i_temp1, 15			; Every 16 overflows
 		brne	t1ovfl_int1
 		tst	rc_timeout
 		breq	t1ovfl_int2
@@ -1080,6 +1084,10 @@ t1ovfl_int2:	lds	i_temp1, rct_boot
 		inc	i_temp1
 		sts	rct_beacon, i_temp1
 		rjmp	t1ovfl_int1
+trigger_adc:
+		sbr	flags2, (1 << READ_ADC)
+		rjmp t1ovfl_int1
+
 ;-----bko-----------------------------------------------------------------
 ; NOTE: This interrupt uses the 16-bit atomic timer read/write register
 ; by reading TCNT1L and TCNT1H, so this interrupt must be disabled before
@@ -3495,7 +3503,7 @@ start_adc_read:
 .endif
 		out	SFIOR, ZH	; Disable comparator mux and start adc
 		out	ADMUX, temp1
-		ldi	temp1, (1 << ADEN) + (1 << ADSC) + (1 << ADIE) + 4
+		ldi	temp1, (1 << ADEN) + (1 << ADSC) + (1 << ADIE) + (1 << ADPS2) + (1 << ADPS1) + (1 << ADPS0)
 		out	ADCSRA, temp1
 .endif
 		ret
