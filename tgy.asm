@@ -2303,19 +2303,29 @@ evaluate_rc_i2c:
 		rjmp	rc_do_scale		; The rest of the code is common
 	.else
 		cbr	flags1, (1<<EVAL_RC)+(1<<REVERSE)
-		.if MOTOR_REVERSE
+		;.if MOTOR_REVERSE
 		sbrc	YH, 7
-		.else
-		sbrs	YH, 7
-		.endif
-		sbr	flags1, (1<<REVERSE)
-		cbr	YH, (1<<7)
+		;.else
+		;sbrs	YH, 7
+		;.endif
+		rcall i2c_set_reverse
+		;sbr	  flags1, (1<<REVERSE)
+		;cbr	YH, (1<<7)
 		adiw	YL, 0			; 16-bit zero-test
 		breq	rc_duty_set		; Power off
 	; Scale so that Y == 32767 is MAX_POWER.
 		movw	temp1, YL
 		ldi2	temp3, temp4, 0x10000 * (POWER_RANGE - MIN_DUTY) / 32767
 		rjmp	rc_do_scale		; The rest of the code is common
+i2c_set_reverse:
+		sbr	  flags1, (1<<REVERSE)
+		; The next three lines make the value positive so that we basically
+		; set the reverse flag and then absolute value the speed
+		com   YH
+		com   YL
+		subi  YL,-1
+		sbci  YH,-1
+		ret
 	.endif
 .endif
 ;-----bko-----------------------------------------------------------------
