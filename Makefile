@@ -5,7 +5,7 @@ SHELL = /bin/bash
 
 .SUFFIXES: .inc .hex
 
-ALL_TARGETS = afro.hex afro2.hex afro_hv.hex afro_nfet.hex arctictiger.hex birdie70a.hex bluesc.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex dlux.hex hk200a.hex hm135a.hex kda.hex mkblctrl1.hex rb50a.hex rb70a.hex rct50a.hex tbs.hex tp.hex tp_8khz.hex tp_i2c.hex tp_nfet.hex tp70a.hex tgy6a.hex tgy.hex
+ALL_TARGETS = afro.hex afro2.hex afro_hv.hex afro_nfet.hex arctictiger.hex birdie70a.hex blueesc.hex bs_nfet.hex bs.hex bs40a.hex dlu40a.hex dlux.hex hk200a.hex hm135a.hex kda.hex mkblctrl1.hex rb50a.hex rb70a.hex rct50a.hex tbs.hex tp.hex tp_8khz.hex tp_i2c.hex tp_nfet.hex tp70a.hex tgy6a.hex tgy.hex
 AUX_TARGETS = diy0.hex
 
 MOTOR_ID?= 0	# MK-style I2C motor ID, or UART motor number
@@ -24,7 +24,7 @@ $(AUX_TARGETS): tgy.asm boot.inc
 test: all
 
 clean:
-	-rm -f $(ALL_TARGETS) *.obj *.eep.hex *.eeprom
+	-rm -f $(ALL_TARGETS) *.obj *.eep.hex *.eeprom *.cof
 
 binary_zip: $(ALL_TARGETS)
 	TARGET="tgy_`date '+%Y-%m-%d'`_`git rev-parse --verify --short HEAD`.zip"; \
@@ -72,12 +72,19 @@ read_dapa:
 read_uisp:
 	uisp -dprog=dapa --download -v of=flash.hex
 
-build_8:
-	for MOTOR_ID in 0 1 2 3 4 5 6 7; do \
+build_blueesc_addresses:
+	for MOTOR_ID in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do \
 		make clean; \
 		export MOTOR_ID; \
-		make all || exit -1; \
-		for target in $(ALL_TARGETS); do \
-			mv "$$target" "$$target".$$MOTOR_ID || exit -1; \
-		done; \
+		make blueesc.hex || exit -1; \
+		mv blueesc.hex blueesc"_id"$$MOTOR_ID."hex" || exit -1; \
 	done
+
+build_blueesc_addresses_zip:
+	make build_blueesc_addresses; \
+	TARGET="blueesc_firmware_`date '+%Y-%m-%d'`_`git rev-parse --verify --short HEAD`.zip"; \
+	git archive -9 -o "$$TARGET" HEAD && \
+	zip -9 "$$TARGET" blueesc_id*.hex && ls -l "$$TARGET"
+
+clean_blueesc:
+	-rm -f blueesc_id*.hex
