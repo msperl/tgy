@@ -1066,7 +1066,7 @@ t1ovfl_int:	in	i_sreg, SREG
 		sts	tcnt1x, i_temp1
 		brne	timeout_check
 		;sbr	flags2, (1 << READ_ADC)		; Every 256 overflows
-timeout_check:	
+timeout_check:
 		andi  i_temp1, 127     ; Every 64 overflows
 		breq trigger_adc
 		lds i_temp1, tcnt1x
@@ -3248,7 +3248,7 @@ run6:
 		ldi2	temp1, temp2, PWR_MAX_START
 		rjmp	run6_3
 
-run6_2:		
+run6_2:
 		cbr	flags1, (1<<STARTUP)
 		RED_off
 		; Build up sys_control to MAX_POWER in steps.
@@ -3534,7 +3534,7 @@ adc_int:
 		sts	vbat_h, i_temp2
 		cbr	flags2, (1 << ADC_VOLTAGE)
 		reti
-save_temp:	
+save_temp:
 		sts	adctemp_l, i_temp1
 		sts	adctemp_h, i_temp2
 		sbr	flags2, (1 << ADC_VOLTAGE)
