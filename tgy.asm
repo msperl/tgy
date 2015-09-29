@@ -345,7 +345,11 @@ rev_scale_l:	.byte	1
 rev_scale_h:	.byte	1
 neutral_l:	.byte	1	; Offset for neutral throttle (in CPU_MHZ)
 neutral_h:	.byte	1
+rc_timeout_armed:	.byte	1	; timeout when armed (in 65536us)
+rc_timeout_unarmed:	.byte	1	; timeout when un-armed (in 65536us)
 .if USE_I2C
+i2c_timeout_armed:	.byte	1	; timeout when armed (in 65536us)
+i2c_timeout_unarmed:	.byte	1	; timeout when un-armed (in 65536us)
 i2c_max_pwm:	.byte	1	; MaxPWM for MK (NOTE: 250 while stopped is magic and enables v2)
 i2c_rx_state:	.byte	1
 i2c_blc_offset:	.byte	1
@@ -1145,6 +1149,9 @@ falling_edge:
 .error "MAX_RC_PULS * CPU_MHZ too big to fit in two bytes -- adjust it or the rcp_int code"
 .endif
 		sbr	flags1, (1<<EVAL_RC)
+		;; set timeout values as per pwm
+		rcall	set_pwm_timeouts
+
 rcpint_exit:	rcp_int_rising_edge i_temp1	; Set next int to rising edge
 		out	SREG, i_sreg
 		reti
@@ -1432,6 +1439,7 @@ i2c_rx_hi:	mov	rx_h, i_temp2
 		rjmp	i2c_ack
 i2c_rx_lo:	mov	rx_l, i_temp2
 		sbr	flags1, (1<<EVAL_RC)|(1<<I2C_MODE)	; i2c message received
+		rcall	i2c_set_timeouts
 		rjmp	i2c_ack
 
 i2c_tx_init:
@@ -2265,14 +2273,9 @@ rc_duty_set:	sts	rc_duty_l, YL
 		sts	rc_duty_h, YH
 		sbrs	flags0, SET_DUTY
 		rjmp	rc_no_set_duty
-		.if defined(USE_INT0S) || defined(SIMPLE_I2C)
-		ldi	temp1, 64		; about 4s for serial
-		.else
-		ldi	temp1, 2
-		.endif
-		mov	rc_timeout, temp1	; Short rc_timeout when driving
+		lds	rc_timeout, rc_timeout_armed
 		rjmp	set_new_duty_l		; Skip reload into YL:YH
-rc_no_set_duty:	ldi	temp1, RCP_TOT
+rc_no_set_duty:	lds	temp1, rc_timeout_unarmed
 		cp	rc_timeout, temp1
 		adc	rc_timeout, ZH
 		ret
@@ -2763,6 +2766,20 @@ i2c_init:
 		.endif
 		out	TWAR, temp1
 		outi	TWCR, (1<<TWIE)+(1<<TWEN)+(1<<TWEA)+(1<<TWINT), temp1
+
+		; set the i2c timeout defaults
+i2c_set_rc_timeouts_default:
+		ldi	temp1, 64
+		sts	i2c_timeout_armed, temp1
+		ldi	temp1, RCP_TOT
+		sts	i2c_timeout_unarmed, temp1
+		ret
+
+i2c_set_timeouts:
+		lds	temp1, i2c_timeout_armed
+		sts	rc_timeout_armed, temp1
+		lds	temp1, i2c_timeout_unarmed
+		sts	rc_timeout_unarmed, temp1
 		ret
 .endif
 ;-----bko-----------------------------------------------------------------
@@ -3547,6 +3564,16 @@ save_current:
 		reti
 
 ;-----bko-----------------------------------------------------------------
+; set default pwm timeouts
+; using i_temp1 as this is mostly used during irq and during init...
+set_pwm_timeouts:
+		ldi	i_temp1, 2
+		sts	rc_timeout_armed, i_temp1
+		ldi	i_temp1, RCP_TOT
+		sts	rc_timeout_unarmed, i_temp1
+		ret
+
+;-----bko-----------------------------------------------------------------
 ; init after reset
 
 reset:		clr	r0
@@ -3607,6 +3634,9 @@ clear_loop1:	cp	ZL, r0
 	; Read EEPROM block to RAM
 		rcall	eeprom_read_block	; Also calls osccal_set
 		rcall	eeprom_check_reset
+
+	; set standard timeouts for pwm
+		rcall	set_pwm_timeouts
 
 	; Early input initialization is required for i2c BL-Ctrl V2 detection
 	; This serves data from the EEPROM, so this is as early as possible.
