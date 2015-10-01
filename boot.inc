@@ -672,7 +672,7 @@ boot_clear_flash:
 		ldi	ZL, low(BOOT_START)
 		ldi	ZH, high(BOOT_START)
 		ldi	r22, (1<<PGERS)+(1<<SPMEN)
-boot_clear_fl1:	sbiw	ZL, PAGESIZE
+boot_clear_fl1:	sbiwx	ZL, ZH, PAGESIZE
 		rcall	boot_spm		; Erase page (never this code)
 		brne	boot_clear_fl1
 		movw	r12, ZL			; Zero r12:r13 (for EEPROM address later)

@@ -2927,7 +2927,11 @@ boot_loader_jump:
 		outr	WDTCR, ZH		; Disable watchdog
 		lds	temp1, orig_osccal
 		outr	OSCCAL, temp1		; Restore OSCCAL
+.if (FLASHEND > 0xfff)
+		jmp	BOOT_START		; Jump to boot loader
+.else
 		rjmp	BOOT_START		; Jump to boot loader
+.endif
 .endif
 ;-----bko-----------------------------------------------------------------
 .if USE_I2C
