@@ -355,6 +355,9 @@ i2c_rx_state:	.byte	1
 i2c_blc_offset:	.byte	1
 i2c_tx_cache:	.byte	1
 .endif
+.if defined(USE_SLEEP) && USE_SLEEP
+sleep_mask:	.byte	1	; mask applied to MCUSR before sleeping
+.endif
 motor_count:	.byte	1	; Motor number for serial control
 com_count_l:	.byte	1	; Commutations count since last serial read
 com_count_h:	.byte	1 ;
@@ -2274,10 +2277,22 @@ rc_duty_set:	sts	rc_duty_l, YL
 		sbrs	flags0, SET_DUTY
 		rjmp	rc_no_set_duty
 		lds	rc_timeout, rc_timeout_armed
+.if defined(USE_SLEEP) && USE_SLEEP
+	; disable sleep enable bit
+		lds	temp1, sleep_mask
+		cbr	temp1, SE
+		sts	sleep_mask, temp1
+.endif
 		rjmp	set_new_duty_l		; Skip reload into YL:YH
 rc_no_set_duty:	lds	temp1, rc_timeout_unarmed
 		cp	rc_timeout, temp1
 		adc	rc_timeout, ZH
+.if defined(USE_SLEEP) && USE_SLEEP
+	; disable sleep enable bit
+		lds	temp1, sleep_mask
+		sbr	temp1, SE
+		sts	sleep_mask, temp1
+.endif
 		ret
 ;-----bko-----------------------------------------------------------------
 .if USE_I2C
@@ -2868,12 +2883,60 @@ control_disarm:
 		sts	com_count_l, temp1
 		.endif
 
+
 	; Wait for one of the input sources to give arming input
 
+		; this is potentially a race condition between the unarm
+		; and a new i2c command arriving
+main_loop_unarmed:
 i_rc_puls1:	clr	rc_timeout
 		cbr	flags1, (1<<EVAL_RC)+(1<<I2C_MODE)+(1<<UART_MODE)
 		sts	rct_boot, ZH
 		sts	rct_beacon, ZH
+
+.if defined(USE_SLEEP) && USE_SLEEP
+	; enable basic sleep enable bit
+		lds	temp1, sleep_mask
+		sbr	temp1, SE
+		sts	sleep_mask, temp1
+.endif
+
+main_loop:
+main_loop_sleep:
+.if defined(USE_SLEEP) && USE_SLEEP
+	; run sleep when ther is nothing to do - interrupts can
+	; wake us up again
+	; note that we can safely use idle mode - and that also when armed
+	; the only other sensible mode is standby with the main clock still
+	; running, but then due to limitations of the Mega8 the only possible
+	; wakeup sources are: I2C, INT1 and INT2.
+	; Unfortunately there is no interrupt from watchdog nor
+	; generic pin change interrupts to wake us from deeper sleeps...
+	;
+		lds	temp2, sleep_mask 	; load the requested sleep mode
+		sbrs	temp2, SE		; skip sleep mode if unset
+		rjmp	main_loop_no_sleep
+
+	; test for any interresting flags that would require us running
+	; but with interrupts disabled
+		cli
+		mov	temp1, flags1
+		andi	temp1, (1<<EVAL_RC)+(1<<I2C_MODE)+(1<<UART_MODE)
+		brne	no_sleep
+
+		; setting up sleep mode as required keeping the "correct" bits...
+		in	temp1, MCUCR
+		andi	temp1, byte1(~((1<<SM0)+(1<<SM1)+(1<<SM2)+(1<<SE)))
+		or	temp1, temp2
+		out	MCUCR, temp1
+
+		; sleeping with interrupts enabled (1 cycle after sei)
+		sei
+		sleep
+no_sleep:	; enable interrupts also for the non-sleep case
+		sei
+.endif
+main_loop_no_sleep:
 i_rc_puls2:	wdr
 		.if defined(HK_PROGRAM_CARD)
 		.endif
@@ -2887,23 +2950,24 @@ i_rc_puls2:	wdr
 		.if BEACON
 		lds	temp1, rct_beacon
 		cpi	temp1, 120		; Beep every 120 * 16 * 65536us (~8s)
-		brne	i_rc_puls2
+		brlt	main_loop_sleep
 		ldi	temp1, 60
 		sts	rct_beacon, temp1	; Double rate after the first beep
 		rcall	beep_f3			; Beacon
 		.endif
-		rjmp	i_rc_puls2
+		rjmp	main_loop_unarmed
+
 i_rc_puls_rx:	rcall	evaluate_rc_init
 		lds	YL, rc_duty_l
 		lds	YH, rc_duty_h
 		adiw	YL, 0			; Test for zero
-		brne	i_rc_puls1
+		brne	main_loop_no_sleep
 		.if defined(USE_INT0S) || defined(SIMPLE_I2C)
 		; A single command is enough so as to allow slow rates
 		.else
 		ldi	temp1, 10		; wait for this count of receiving power off
 		cp	rc_timeout, temp1
-		brlo	i_rc_puls2
+		brlo	main_loop_sleep
 		.endif
 		.if USE_I2C
 		sbrs	flags1, I2C_MODE
