@@ -175,43 +175,43 @@ boot_reset:	ldi	ZL, high(RAMEND)	; Set up stack
 		ldi	XL, low(TX_BUFFER)
 		ldi	XH, high(TX_BUFFER)
 		ldi	r20, (1<<CS21)		; timer2: clk/8 ... 256 ticks @ 16MHz = 128us; @ 8MHz = 256us
-		out	TCCR2, r20
+		outr	TCCR2B, r20
 		ldi	r21, -BOOT_RX_TRIES
 boot_rx_time:	inc	r21
 		breq	boot_exit		; Exit if too many unsuccessful rx restarts
-		ldi	r20, (1<<TOV2)+(1<<OCF2)
-		out	TCNT2, r16
-		out	TIFR, r20
+		ldi	r20, (1<<TOV2)+(1<<OCF2B)
+		outr	TCNT2, r16
+		outr	TIFR2, r20
 boot_rx_time1:	cpi	XL, low(TX_BUFFER)
 		breq	boot_rx_no_tx
-		in	r14, TIFR
+		inr	r14, TIFR2
 		sbrc	r14, TOV2
 		rjmp	boot_tx_bytes
 boot_rx_no_tx:	sbic	RCP_PIN, rcp_in
 		rjmp	boot_rx_time1		; Loop while high, waiting for low edge
-		out	TCNT2, r16
-		out	TIFR, r20
-boot_rx_time2:	in	r14, TIFR
+		outr	TCNT2, r16
+		outr	TIFR2, r20
+boot_rx_time2:	inr	r14, TIFR2
 		sbrc	r14, TOV2
 boot_exit:	rjmp	FLASHEND + 1		; Low too long -- exit boot loader
 		sbis	RCP_PIN, rcp_in		; Loop while low
 		rjmp	boot_rx_time2
-		out	TCNT2, r16
-		out	TIFR, r20		; Start measuring high time
-boot_rx_time3:	in	r14, TIFR
+		outr	TCNT2, r16
+		outr	TIFR2, r20		; Start measuring high time
+boot_rx_time3:	inr	r14, TIFR2
 		sbrc	r14, TOV2
 		rjmp	boot_rx_time		; High too long, start over
 		sbic	RCP_PIN, rcp_in		; Loop while high, waiting for low edge
 		rjmp	boot_rx_time3
-		in	r3, TCNT2		; Save learned high time
-		out	TCNT2, r16
-		out	TIFR, r20		; Start measuring low time
-boot_rx_time4:	in	r14, TIFR
+		inr	r3, TCNT2		; Save learned high time
+		outr	TCNT2, r16
+		outr	TIFR2, r20		; Start measuring low time
+boot_rx_time4:	inr	r14, TIFR2
 		sbrc	r14, TOV2
 		rjmp	FLASHEND + 1		; Low too long, exit boot loader
 		sbis	RCP_PIN, rcp_in		; Loop while low, waiting for high edge
 		rjmp	boot_rx_time4
-		in	r2, TCNT2		; Save learned low time
+		inr	r2, TCNT2		; Save learned low time
 		mov	r0, r2
 		add	r0, r3
 	; C:r0 now contains the number of timer2 ticks for one bit.
@@ -233,53 +233,53 @@ boot_rx_time4:	in	r14, TIFR
 		ldi	r24, 3			; Skip storing of 3 leader bytes
 	; Bit-decoding: Set high-to-low edge counting timer (r8), and wait
 	; for it to expire.
-boot_rx:	out	TCNT2, r8
-		out	TIFR, r20
-boot_rx0:	in	r14, TIFR
+boot_rx:	outr	TCNT2, r8
+		outr	TIFR2, r20
+boot_rx0:	inr	r14, TIFR2
 		sbrc	r14, TOV2
 		rjmp	FLASHEND + 1		; Low too long, exit boot loader
 		sbis	RCP_PIN, rcp_in
 		rjmp	boot_rx0
-		out	TCNT2, r8		; Count falling edges for 7/8th of one bit time
-		out	TIFR, r20
-boot_rx1:	in	r14, TIFR
+		outr	TCNT2, r8		; Count falling edges for 7/8th of one bit time
+		outr	TIFR2, r20
+boot_rx1:	inr	r14, TIFR2
 		sbrc	r14, TOV2
 		rjmp	boot_rx_time		; High too long (or EOT), start over
 		sbic	RCP_PIN, rcp_in
 		rjmp	boot_rx1
 		sec				; Receiving 1-bit
-boot_rx2:	in	r14, TIFR
+boot_rx2:	inr	r14, TIFR2
 		sbrc	r14, TOV2
 		rjmp	boot_rx_bit		; Timeout, must be 1-bit
 		sbis	RCP_PIN, rcp_in
 		rjmp	boot_rx2
-boot_rx3:	in	r14, TIFR
+boot_rx3:	inr	r14, TIFR2
 		sbrc	r14, TOV2
 		rjmp	boot_rx_time		; Hmm, timed out during second high
 		sbic	RCP_PIN, rcp_in
 		rjmp	boot_rx3
 		clc				; Receiving 0-bit
-boot_rx4:	in	r14, TIFR
+boot_rx4:	inr	r14, TIFR2
 		sbrc	r14, TOV2
 		rjmp	boot_rx_bit		; Timeout, must be 0-bit
 		sbis	RCP_PIN, rcp_in
 		rjmp	boot_rx4
 
 boot_tx_bytes:
-		out	OCR2, r4		; Set OCF2 at quarter timing
+		outr	OCR2B, r4		; Set OCF2 at quarter timing
 		ldi	r24, 23			; Leader is 23 1-bits, 1 0-bit
 boot_tx_leader:
 		sbi	RCP_PORT, rcp_in	; Drive high
 		sbi	RCP_DDR, rcp_in
-		out	TCNT2, r3
-		out	TIFR, r20
-boot_tx_lead1:	in	r14, TIFR
+		outr	TCNT2, r3
+		outr	TIFR2, r20
+boot_tx_lead1:	inr	r14, TIFR2
 		sbrs	r14, TOV2
 		rjmp	boot_tx_lead1
 		cbi	RCP_PORT, rcp_in	; Drive low
-		out	TCNT2, r2
-		out	TIFR, r20
-boot_tx_lead2:	in	r14, TIFR
+		outr	TCNT2, r2
+		outr	TIFR2, r20
+boot_tx_lead2:	inr	r14, TIFR2
 		sbrs	r14, TOV2
 		rjmp	boot_tx_lead2
 		dec	r24
@@ -307,22 +307,22 @@ boot_tx:	cp	YL, XL
 		ldi	r24, 8			; Send 8 bits
 boot_tx_bits:	lsr	r22			; Put next bit in carry flag
 		sbi	RCP_PORT, rcp_in	; Drive high
-		out	TCNT2, r3
-		out	TIFR, r20
-boot_tx1:	in	r14, TIFR
+		outr	TCNT2, r3
+		outr	TIFR2, r20
+boot_tx1:	inr	r14, TIFR2
 		brcs	boot_tx2
-		sbrc	r14, OCF2
+		sbrc	r14, OCF2B
 		out	RCP_PORT, r16		; Drive low
 boot_tx2:	sbrs	r14, TOV2
 		rjmp	boot_tx1
 		cbi	RCP_PORT, rcp_in
 		brcs	boot_tx_low
 		sbi	RCP_PORT, rcp_in	; Drive high
-boot_tx_low:	out	TCNT2, r2
-		out	TIFR, r20
-boot_tx3:	in	r14, TIFR
+boot_tx_low:	outr	TCNT2, r2
+		outr	TIFR2, r20
+boot_tx3:	inr	r14, TIFR2
 		brcs	boot_tx4
-		sbrc	r14, OCF2
+		sbrc	r14, OCF2B
 		out	RCP_PORT, r16		; Drive low
 boot_tx4:	sbrs	r14, TOV2
 		rjmp	boot_tx3
@@ -331,14 +331,14 @@ boot_tx4:	sbrs	r14, TOV2
 		rjmp	boot_tx
 	; Go high for a quarter bit time at the end
 boot_tx_end:	sbi	RCP_PORT, rcp_in	; Drive high
-		out	TCNT2, r3
-		out	TIFR, r20
+		outr	TCNT2, r3
+		outr	TIFR2, r20
 		ldi	YL, low(RX_BUFFER)
 		ldi	YH, high(RX_BUFFER)
 		ldi	XL, low(TX_BUFFER)
 		ldi	XH, high(TX_BUFFER)
-boot_tx_end1:	in	r14, TIFR
-		sbrs	r14, OCF2
+boot_tx_end1:	inr	r14, TIFR2
+		sbrs	r14, OCF2B
 		rjmp	boot_tx_end1
 		cbi	RCP_DDR, rcp_in		; Stop driving
 		out	RCP_PORT, r16		; Turn off
@@ -680,6 +680,7 @@ boot_clear_fl1:	sbiw	ZL, PAGESIZE
 		ret
 
 ; Pad out the boot loader to work around avrdude verifying gaps
+#if defined(TGYDEV_M8)
 		nop
 		nop
 		nop
@@ -698,6 +699,7 @@ boot_clear_fl1:	sbiw	ZL, PAGESIZE
 		nop
 		nop
 		nop
+#endif
 
 ; Keep these addresses within a page so that we can self-update.
 .org FLASHEND + 1 - 32
