@@ -168,6 +168,9 @@ boot_reset:	ldi	ZL, high(RAMEND)	; Set up stack
 		out	SPH, ZH
 		out	SPL, ZL
 		ldi	r16, 0			; Use r16 as zero
+.ifdef PRR
+		outr	PRR, r16		; enable power to all modules
+.endif
 		ldi	ZL, low(stk_rx_start)
 		ldi	ZH, high(stk_rx_start)
 		ldi	YL, low(RX_BUFFER)
