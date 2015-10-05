@@ -50,7 +50,8 @@
 ;
 ;-- Device ----------------------------------------------------------------
 ;
-.include "m8def.inc"
+.include "m328Pdef.inc"
+;.include "m8def.inc"
 ;
 ; 8K Bytes of In-System Self-Programmable Flash
 ; 512 Bytes EEPROM
@@ -387,7 +388,6 @@ eeprom_end:	.byte	1
 ;-----bko-----------------------------------------------------------------
 ;**** **** **** **** ****
 .cseg
-.org 0
 #ifdef _M8DEF_INC_
 .equ TGYDEV_M8	= 1
 #elif defined(_M88DEF_INC_) || defined(_M88PDEF_INC_) || defined(_M88PADEF_INC_)
@@ -417,52 +417,8 @@ eeprom_end:	.byte	1
 ; ADC - AC
 .equ	ADCSRB	= SFIOR
 
-;**** **** **** **** ****
-; ATmega8 interrupts
-
-;.equ	INT0addr=$001	; External Interrupt0 Vector Address
-;.equ	INT1addr=$002	; External Interrupt1 Vector Address
-;.equ	OC2addr =$003	; Output Compare2 Interrupt Vector Address
-;.equ	OVF2addr=$004	; Overflow2 Interrupt Vector Address
-;.equ	ICP1addr=$005	; Input Capture1 Interrupt Vector Address
-;.equ	OC1Aaddr=$006	; Output Compare1A Interrupt Vector Address
-;.equ	OC1Baddr=$007	; Output Compare1B Interrupt Vector Address
-;.equ	OVF1addr=$008	; Overflow1 Interrupt Vector Address
-;.equ	OVF0addr=$009	; Overflow0 Interrupt Vector Address
-;.equ	SPIaddr =$00a	; SPI Interrupt Vector Address
-;.equ	URXCaddr=$00b	; USART Receive Complete Interrupt Vector Address
-;.equ	UDREaddr=$00c	; USART Data Register Empty Interrupt Vector Address
-;.equ	UTXCaddr=$00d	; USART Transmit Complete Interrupt Vector Address
-;.equ	ADCCaddr=$00e	; ADC Interrupt Vector Address
-;.equ	ERDYaddr=$00f	; EEPROM Interrupt Vector Address
-;.equ	ACIaddr =$010	; Analog Comparator Interrupt Vector Address
-;.equ	TWIaddr =$011	; Irq. vector address for Two-Wire Interface
-;.equ	SPMaddr =$012	; SPM complete Interrupt Vector Address
-;.equ	SPMRaddr =$012	; SPM complete Interrupt Vector Address
-
-;-----bko-----------------------------------------------------------------
-; Reset and interrupt jump table
-; When multiple interrupts are pending, the vectors are executed from top
-; (ext_int0) to bottom.
-		rjmp reset	; reset
-		rjmp rcp_int	; ext_int0
-		reti		; ext_int1
-		reti		; t2oc_int
-		ijmp		; t2ovfl_int
-		rjmp rcp_int	; icp1_int
-		rjmp t1oca_int	; t1oca_int
-		rjmp t1ocb_int	; t1ocb_int
-		rjmp t1ovfl_int	; t1ovfl_int
-		reti		; t0ovfl_int
-		reti		; spi_int
-		rjmp urxc_int	; urxc
-		reti		; udre
-		reti		; utxc
-		rjmp adc_int	; adc_int
-		reti		; eep_int
-		reti		; aci_int
-		rjmp i2c_int	; twi_int
-		reti		; spmc_int
+; some vector renames
+.equ	OC2Baddr = OC2addr
 
 #elif defined(TGYDEV_MX8)
 ;-----bko-----------------------------------------------------------------
@@ -487,85 +443,56 @@ eeprom_end:	.byte	1
 .equ	UCSRC	= UCSR0C
 .equ	UDR	= UDR0
 
-;**** **** **** **** ****
-; ATmegaX8 interrupts
+#else
+#error "unsupported platform"
+#endif
 
-;.equ	INT0addr=$001	; External Interrupt0 Vector Address
-;.equ	INT1addr=$002	; External Interrupt1 Vector Address
-;.equ	OC2addr =$003	; Output Compare2 Interrupt Vector Address
-;.equ	OVF2addr=$004	; Overflow2 Interrupt Vector Address
-;.equ	ICP1addr=$005	; Input Capture1 Interrupt Vector Address
-;.equ	OC1Aaddr=$006	; Output Compare1A Interrupt Vector Address
-;.equ	OC1Baddr=$007	; Output Compare1B Interrupt Vector Address
-;.equ	OVF1addr=$008	; Overflow1 Interrupt Vector Address
-;.equ	OVF0addr=$009	; Overflow0 Interrupt Vector Address
-;.equ	SPIaddr =$00a	; SPI Interrupt Vector Address
-;.equ	URXCaddr=$00b	; USART Receive Complete Interrupt Vector Address
-;.equ	UDREaddr=$00c	; USART Data Register Empty Interrupt Vector Address
-;.equ	UTXCaddr=$00d	; USART Transmit Complete Interrupt Vector Address
-;.equ	ADCCaddr=$00e	; ADC Interrupt Vector Address
-;.equ	ERDYaddr=$00f	; EEPROM Interrupt Vector Address
-;.equ	ACIaddr =$010	; Analog Comparator Interrupt Vector Address
-;.equ	TWIaddr =$011	; Irq. vector address for Two-Wire Interface
-;.equ	SPMaddr =$012	; SPM complete Interrupt Vector Address
-;.equ	SPMRaddr =$012	; SPM complete Interrupt Vector Address
-;.equ	PCINT0addr=$003 ;
-;.equ	PCINT1addr=$004 ;
-;.equ	PCINT2addr=$005 ;
-;.equ	WDTaddr=$006	; Watchdog Timer Interrupt Vector Address
-;.equ	OC2Aaddr =$007	; Output Compare2A Interrupt Vector Address
-;.equ	OC2Baddr =$008	; Output Compare2B Interrupt Vector Address
-;.equ	OVF2addr=$009	; Overflow2 Interrupt Vector Address
-;.equ	ICP1addr=$00A	; Input Capture1 Interrupt Vector Address
-;.equ	OC1Aaddr=$00B	; Output Compare1A Interrupt Vector Address
-;.equ	OC1Baddr=$00C	; Output Compare1B Interrupt Vector Address
-;.equ	OVF1addr=$00D	; Overflow1 Interrupt Vector Address
-;.equ	OC0Aaddr=$00E	; Output Compare0A Interrupt Vector Address
-;.equ	OC0Baddr=$00F	; Output Compare0B Interrupt Vector Address
-;.equ	OVF0addr=$010	; Overflow0 Interrupt Vector Address
-;.equ	SPIaddr =$011	; SPI Interrupt Vector Address
-;.equ	URXCaddr=$012	; USART Receive Complete Interrupt Vector Address
-;.equ	UDREaddr=$013	; USART Data Register Empty Interrupt Vector Address
-;.equ	UTXCaddr=$014	; USART Transmit Complete Interrupt Vector Address
-;.equ	ADCCaddr=$015	; ADC Interrupt Vector Address
-;.equ	ERDYaddr=$016	; EEPROM Interrupt Vector Address
-;.equ	ACIaddr =$017	; Analog Comparator Interrupt Vector Address
-;.equ	TWIaddr =$018	; Irq. vector address for Two-Wire Interface
-;.equ	SPMaddr =$019	; SPM complete Interrupt Vector Address
+;**** **** **** **** ****
+; ATmega interrupts
+; offsets taken from machine info
 
 ;-----bko-----------------------------------------------------------------
 ; Reset and interrupt jump table
 ; When multiple interrupts are pending, the vectors are executed from top
 ; (ext_int0) to bottom.
+.org 0
 		rjmp reset	; reset
+.org INT0addr
 		rjmp rcp_int	; ext_int0
+.org INT1addr
 		reti		; ext_int1
-		reti		; ext_pcint0
-		reti		; ext_pcint1
-		reti		; ext_pcint2
-		reti		; wdt_int
-		reti		; t2oca_int
-		reti		; t2ocb_int
+.org OC2Baddr
+		reti		; t2oc_int
+.org OVF2addr
 		ijmp		; t2ovfl_int
+.org ICP1addr
 		rjmp rcp_int	; icp1_int
+.org OC1Aaddr
 		rjmp t1oca_int	; t1oca_int
+.org OC1Baddr
 		rjmp t1ocb_int	; t1ocb_int
+.org OVF1addr
 		rjmp t1ovfl_int	; t1ovfl_int
-		reti		; t0oca_int
-		reti		; t0ocb_int
+.org OVF0addr
 		reti		; t0ovfl_int
+.org SPIaddr
 		reti		; spi_int
+.org URXCaddr
 		rjmp urxc_int	; urxc
+.org UDREaddr
 		reti		; udre
+.org UTXCaddr
 		reti		; utxc
+.org ADCCaddr
 		rjmp adc_int	; adc_int
+.org ERDYaddr
 		reti		; eep_int
+.org ACIaddr
 		reti		; aci_int
+.org TWIaddr
 		rjmp i2c_int	; twi_int
+.org SPMRaddr
 		reti		; spmc_int
-#else
-#error "unsupported platform"
-#endif
 
 eeprom_defaults_w:
 	.db low(EEPROM_SIGN), high(EEPROM_SIGN)
@@ -751,6 +678,18 @@ eeprom_defaults_w:
 		outr	@0, @2
 	.else
 		outr	@0, ZH
+	.endif
+.endmacro
+
+;-- Power management of modules ------------------------------------------
+.macro PRR_ENABLE
+	.ifdef PRR
+		cbir	PRR, @0, @1
+	.endif
+.endmacro
+.macro PRR_DISABLE
+	.ifdef PRR
+		sbir	PRR, @0, @1
 	.endif
 .endmacro
 
@@ -2150,6 +2089,8 @@ init_debug_tx:
 .error "Cannot use UART TX with this pin configuration"
 .endif
 	; Initialize TX for debugging on boards with free TX pin
+		PRR_ENABLE	PRUSART0, temp1
+
 		.equ	D_BAUD_RATE = 38400
 		.equ	D_UBRR_VAL = F_CPU / D_BAUD_RATE / 16 - 1
 		outi	UBRRH, high(D_UBRR_VAL), temp1
@@ -2904,6 +2845,7 @@ boot_loader_test:
 		sbic	PIND, rcp_in		; Skip clear if INT0 pin low (inverted)
 		.endif
 		sts	rct_boot, ZH		; Clear rct_count when low
+
 		lds	temp1, rct_boot
 		sbrs	temp1, 5 		; Wait 32 * 16 * 65536us (~2s) before jumping
 boot_ret:	ret
@@ -2936,6 +2878,8 @@ boot_loader_jump:
 ;-----bko-----------------------------------------------------------------
 .if USE_I2C
 i2c_init:
+		PRR_ENABLE	PRTWI, temp1
+
 		ldi	temp1, (I2C_ADDR + MOTOR_ID) << 1
 		.if defined(MK_ADDRESS_PADS)
 		sbis	PINB, adr1		; Offset MOTOR_ID by address pads
@@ -2995,6 +2939,7 @@ control_disarm:
 	; Messages start with 0xdd 0xdd, have 7 bytes of config,
 	; and end with 0xde, sent two seconds after power-up or
 	; after any jumper change.
+		PRR_ENABLE	PRUSART0, temp1
 		.equ	BAUD_RATE = 1200
 		.equ	UBRR_VAL = F_CPU / BAUD_RATE / 16 - 1
 		outi	UBRRH, high(UBRR_VAL), temp1
@@ -3005,6 +2950,7 @@ control_disarm:
 
 	; Initialize input sources (i2c and/or rc-puls)
 		.if USE_UART && !defined(HK_PROGRAM_CARD)
+		PRR_ENABLE	PRUSART0, temp1
 		.equ	BAUD_RATE = 38400
 		.equ	UBRR_VAL = F_CPU / BAUD_RATE / 16 - 1
 		outi	UBRRH, high(UBRR_VAL), temp1
@@ -3038,7 +2984,7 @@ control_disarm:
 		.endif
 
 	; Wait for one of the input sources to give arming input
-
+main_loop:
 i_rc_puls1:	clr	rc_timeout
 		cbr	flags1, (1<<EVAL_RC)+(1<<I2C_MODE)+(1<<UART_MODE)
 		sts	rct_boot, ZH
@@ -3750,14 +3696,25 @@ reset:		clr	r0
 		ldi2	ZL, ZH, RAMEND
 		out	SPH, ZH
 		out	SPL, ZL
+
 	; Clear RAM and all registers
 clear_loop:	st	-Z, r0
+.if (byte1(SRAM_START) == 0)
 		cpi	ZL, byte1(SRAM_START)
-		cpc	ZH, r0
 		brne	clear_loop1
-		ldi	ZL, 30			; Start clearing registers
-clear_loop1:	cp	ZL, r0
-		cpc	ZH, r0
+		cpi	ZH, byte2(SRAM_START)
+		brne	clear_loop1
+.if byte2(SRAM_START) > 0
+		clr	ZH
+.endif
+.else
+		cpi	ZL, byte1(SRAM_START)
+		cpc	ZH, r0			; for now let us assume that byte2(SRAM_START) == 0
+		brne	clear_loop1
+.endif
+		ldi	Zl, 30			; Start clearing registers
+clear_loop1:	cp	Zl, r0
+		cpc	Zh, r0
 		brne	clear_loop		; Leaves with all registers (r0 through ZH) at 0
 
 	; Save original OSCCAL and reset cause
@@ -3778,12 +3735,27 @@ clear_loop1:	cp	ZL, r0
 		rcall	init_debug_tx
 		.endif
 
+	; Power management
+.ifdef PRR
+		outi	PRR, 0xff, temp1	; power down all modules
+.endif
+
 	; Start timers except output PWM
+		PRR_ENABLE	PRTIM0, temp1
 		outi	TCCR0B, T0CLK, temp1	; timer0: beep control, delays
+		PRR_ENABLE	PRTIM1, temp1
+		outr	TCCR1A, ZH
 		outi	TCCR1B, T1CLK, temp1	; timer1: commutation timing, RC pulse measurement
+		PRR_ENABLE	PRTIM2, temp1
 		outr	TCCR2B, ZH		; timer2: PWM, stopped
 
+	;;  enable ADC/ADCMUX
+		PRR_ENABLE	PRADC, temp1
+
 	; Enable watchdog (WDTON may be set or unset)
+#if defined(TGYDEV_MX8)
+		wdr				; without this WDT may trigger early
+#endif
 		ldi	temp1, (1<<WDCE)+(1<<WDE)
 		outr	WDTCR, temp1
 		ldi	temp1, (1<<WDE)		; Fastest option: ~16.3ms timeout
