@@ -50,8 +50,8 @@
 ;
 ;-- Device ----------------------------------------------------------------
 ;
-.include "m328Pdef.inc"
-;.include "m8def.inc"
+;.include "m328Pdef.inc"
+.include "m8def.inc"
 ;
 ; 8K Bytes of In-System Self-Programmable Flash
 ; 512 Bytes EEPROM
@@ -3744,7 +3744,9 @@ clear_loop1:	cp	Zl, r0
 		PRR_ENABLE	PRTIM0, temp1
 		outi	TCCR0B, T0CLK, temp1	; timer0: beep control, delays
 		PRR_ENABLE	PRTIM1, temp1
+#if defined(TGYDEV_MX8)
 		outr	TCCR1A, ZH
+#endif
 		outi	TCCR1B, T1CLK, temp1	; timer1: commutation timing, RC pulse measurement
 		PRR_ENABLE	PRTIM2, temp1
 		outr	TCCR2B, ZH		; timer2: PWM, stopped
