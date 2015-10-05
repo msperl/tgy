@@ -48,10 +48,28 @@
 ;
 ; Simon Kirby <sim@simulated.ca>
 ;
-;-- Device ----------------------------------------------------------------
-;
-;.include "m328Pdef.inc"
+;-- Device ----------------------------------------------------------------;
+#if defined(MCU_M8)
 .include "m8def.inc"
+#elseif defined(MCU_M88)
+.include "m88def.inc"
+#elseif defined(MCU_M88P)
+.include "m88Pdef.inc"
+#elseif defined(MCU_M88PA)
+.include "m88PAdef.inc"
+#elseif defined(MCU_M168)
+.include "m168def.inc"
+#elseif defined(MCU_M168P)
+.include "m168Pdef.inc"
+#elseif defined(MCU_M168PA)
+.include "m168PAdef.inc"
+#elseif defined(MCU_M168)
+.include "m328def.inc"
+#elseif defined(MCU_M168P)
+.include "m328Pdef.inc"
+#else
+#error "Unsupported MCU"
+#endif
 ;
 ; 8K Bytes of In-System Self-Programmable Flash
 ; 512 Bytes EEPROM
